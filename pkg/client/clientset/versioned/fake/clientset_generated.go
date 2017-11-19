@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2017 The Openshift Evangelists
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,18 +13,17 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-
 package fake
 
 import (
+	clientset "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
+	kinkyv1alpha1 "github.com/guilhem/captaincy/pkg/client/clientset/versioned/typed/kinky/v1alpha1"
+	fakekinkyv1alpha1 "github.com/guilhem/captaincy/pkg/client/clientset/versioned/typed/kinky/v1alpha1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	"k8s.io/client-go/testing"
-	clientset "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
-	samplecontrollerv1alpha1 "github.com/guilhem/captaincy/pkg/client/clientset/versioned/typed/samplecontroller/v1alpha1"
-	fakesamplecontrollerv1alpha1 "github.com/guilhem/captaincy/pkg/client/clientset/versioned/typed/samplecontroller/v1alpha1/fake"
 )
 
 // NewSimpleClientset returns a clientset that will respond with the provided objects.
@@ -60,12 +59,12 @@ func (c *Clientset) Discovery() discovery.DiscoveryInterface {
 
 var _ clientset.Interface = &Clientset{}
 
-// SamplecontrollerV1alpha1 retrieves the SamplecontrollerV1alpha1Client
-func (c *Clientset) SamplecontrollerV1alpha1() samplecontrollerv1alpha1.SamplecontrollerV1alpha1Interface {
-	return &fakesamplecontrollerv1alpha1.FakeSamplecontrollerV1alpha1{Fake: &c.Fake}
+// KinkyV1alpha1 retrieves the KinkyV1alpha1Client
+func (c *Clientset) KinkyV1alpha1() kinkyv1alpha1.KinkyV1alpha1Interface {
+	return &fakekinkyv1alpha1.FakeKinkyV1alpha1{Fake: &c.Fake}
 }
 
-// Samplecontroller retrieves the SamplecontrollerV1alpha1Client
-func (c *Clientset) Samplecontroller() samplecontrollerv1alpha1.SamplecontrollerV1alpha1Interface {
-	return &fakesamplecontrollerv1alpha1.FakeSamplecontrollerV1alpha1{Fake: &c.Fake}
+// Kinky retrieves the KinkyV1alpha1Client
+func (c *Clientset) Kinky() kinkyv1alpha1.KinkyV1alpha1Interface {
+	return &fakekinkyv1alpha1.FakeKinkyV1alpha1{Fake: &c.Fake}
 }

@@ -1,0 +1,6 @@
+apiVersion: captaincy.guilhem.github.com/v1alpha1
+kind: Kinky
+metadata:
+  name: my-kinky
+spec:
+  version: "1.2.2"

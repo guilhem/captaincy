@@ -1,5 +1,5 @@
 /*
-Copyright 2017 The Kubernetes Authors.
+Copyright 2017 The Openshift Evangelists
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,24 +19,21 @@ limitations under the License.
 package externalversions
 
 import (
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	versioned "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
+	internalinterfaces "github.com/guilhem/captaincy/pkg/client/informers/externalversions/internalinterfaces"
+	kinky "github.com/guilhem/captaincy/pkg/client/informers/externalversions/kinky"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
-	versioned "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
-	internalinterfaces "github.com/guilhem/captaincy/pkg/client/informers/externalversions/internalinterfaces"
-	samplecontroller "github.com/guilhem/captaincy/pkg/client/informers/externalversions/samplecontroller"
 	reflect "reflect"
 	sync "sync"
 	time "time"
 )
 
 type sharedInformerFactory struct {
-	client           versioned.Interface
-	namespace        string
-	tweakListOptions internalinterfaces.TweakListOptionsFunc
-	lock             sync.Mutex
-	defaultResync    time.Duration
+	client        versioned.Interface
+	lock          sync.Mutex
+	defaultResync time.Duration
 
 	informers map[reflect.Type]cache.SharedIndexInformer
 	// startedInformers is used for tracking which informers have been started.
@@ -46,17 +43,8 @@ type sharedInformerFactory struct {
 
 // NewSharedInformerFactory constructs a new instance of sharedInformerFactory
 func NewSharedInformerFactory(client versioned.Interface, defaultResync time.Duration) SharedInformerFactory {
-	return NewFilteredSharedInformerFactory(client, defaultResync, v1.NamespaceAll, nil)
-}
-
-// NewFilteredSharedInformerFactory constructs a new instance of sharedInformerFactory.
-// Listers obtained via this SharedInformerFactory will be subject to the same filters
-// as specified here.
-func NewFilteredSharedInformerFactory(client versioned.Interface, defaultResync time.Duration, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) SharedInformerFactory {
 	return &sharedInformerFactory{
 		client:           client,
-		namespace:        namespace,
-		tweakListOptions: tweakListOptions,
 		defaultResync:    defaultResync,
 		informers:        make(map[reflect.Type]cache.SharedIndexInformer),
 		startedInformers: make(map[reflect.Type]bool),
@@ -122,9 +110,9 @@ type SharedInformerFactory interface {
 	ForResource(resource schema.GroupVersionResource) (GenericInformer, error)
 	WaitForCacheSync(stopCh <-chan struct{}) map[reflect.Type]bool
 
-	Samplecontroller() samplecontroller.Interface
+	Kinky() kinky.Interface
 }
 
-func (f *sharedInformerFactory) Samplecontroller() samplecontroller.Interface {
-	return samplecontroller.New(f, f.namespace, f.tweakListOptions)
+func (f *sharedInformerFactory) Kinky() kinky.Interface {
+	return kinky.New(f)
 }
