@@ -10,6 +10,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	captaincyclientset "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
+
+	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
 )
 
 var (
@@ -38,4 +40,14 @@ func main() {
 	for _, cluster := range list.Items {
 		fmt.Printf("cluster %s\n", cluster)
 	}
+
+	etcdClient, err := etcdclientset.NewForConfig(cfg)
+	if err != nil {
+		glog.Fatalf("Error building captaincy clientset: %v", err)
+	}
+	res, err := etcdClient.EtcdV1beta2().EtcdClusters("lol").Create()
+	if err != nil {
+		glog.Fatalf("Error building captaincy clientset: %v", err)
+	}
+	glog.Fatalf("Error building captaincy clientset: %v", res)
 }
