@@ -8,5 +8,5 @@ spec:
     kind: Kinky
     listKind: KinkyList
     plural: kinkies
-  scope: Cluster
+  scope: Namespaced
   version: v1alpha1

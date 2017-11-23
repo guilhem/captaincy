@@ -11,6 +11,7 @@ import (
 
 	captaincyclientset "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
 
+	etcdcluster "github.com/coreos/etcd-operator/pkg/apis/etcd/v1beta2"
 	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
 )
 
@@ -32,22 +33,32 @@ func main() {
 		glog.Fatalf("Error building captaincy clientset: %v", err)
 	}
 
-	list, err := captaincyClient.KinkyV1alpha1().Kinkies().List(metav1.ListOptions{})
+	list, err := captaincyClient.KinkyV1alpha1().Kinkies(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		glog.Fatalf("Error listing all kinkies: %v", err)
 	}
 
-	for _, cluster := range list.Items {
-		fmt.Printf("cluster %s\n", cluster)
-	}
-
 	etcdClient, err := etcdclientset.NewForConfig(cfg)
 	if err != nil {
-		glog.Fatalf("Error building captaincy clientset: %v", err)
+		glog.Fatalf("Error building etcd clientset: %v", err)
 	}
-	res, err := etcdClient.EtcdV1beta2().EtcdClusters("lol").Create()
-	if err != nil {
-		glog.Fatalf("Error building captaincy clientset: %v", err)
+
+	fmt.Printf("cluster %v\n", list)
+
+	for _, cluster := range list.Items {
+		fmt.Printf("cluster %s\n", cluster)
+
+		etcdCl := etcdcluster.EtcdCluster{
+			Spec: etcdcluster.ClusterSpec{
+				Size: 3,
+			},
+		}
+		fmt.Println(cluster.Namespace)
+		res, err := etcdClient.EtcdV1beta2().EtcdClusters(cluster.Namespace).Create(&etcdCl)
+		if err != nil {
+			glog.Errorf("Error spawning ETCD cluster: %v", err)
+		}
+		glog.Infof("Etcd created %v", res)
 	}
-	glog.Fatalf("Error building captaincy clientset: %v", res)
+
 }

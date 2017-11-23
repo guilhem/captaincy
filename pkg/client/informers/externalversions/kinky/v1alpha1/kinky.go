@@ -44,14 +44,14 @@ type kinkyInformer struct {
 // NewKinkyInformer constructs a new informer for Kinky type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
-func NewKinkyInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
+func NewKinkyInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options v1.ListOptions) (runtime.Object, error) {
-				return client.KinkyV1alpha1().Kinkies().List(options)
+				return client.KinkyV1alpha1().Kinkies(namespace).List(options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
-				return client.KinkyV1alpha1().Kinkies().Watch(options)
+				return client.KinkyV1alpha1().Kinkies(namespace).Watch(options)
 			},
 		},
 		&kinky_v1alpha1.Kinky{},
@@ -61,7 +61,7 @@ func NewKinkyInformer(client versioned.Interface, resyncPeriod time.Duration, in
 }
 
 func defaultKinkyInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewKinkyInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	return NewKinkyInformer(client, v1.NamespaceAll, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
 }
 
 func (f *kinkyInformer) Informer() cache.SharedIndexInformer {

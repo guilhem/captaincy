@@ -27,7 +27,7 @@ import (
 // KinkiesGetter has a method to return a KinkyInterface.
 // A group's client should implement this interface.
 type KinkiesGetter interface {
-	Kinkies() KinkyInterface
+	Kinkies(namespace string) KinkyInterface
 }
 
 // KinkyInterface has methods to work with Kinky resources.
@@ -46,12 +46,14 @@ type KinkyInterface interface {
 // kinkies implements KinkyInterface
 type kinkies struct {
 	client rest.Interface
+	ns     string
 }
 
 // newKinkies returns a Kinkies
-func newKinkies(c *KinkyV1alpha1Client) *kinkies {
+func newKinkies(c *KinkyV1alpha1Client, namespace string) *kinkies {
 	return &kinkies{
 		client: c.RESTClient(),
+		ns:     namespace,
 	}
 }
 
@@ -59,6 +61,7 @@ func newKinkies(c *KinkyV1alpha1Client) *kinkies {
 func (c *kinkies) Get(name string, options v1.GetOptions) (result *v1alpha1.Kinky, err error) {
 	result = &v1alpha1.Kinky{}
 	err = c.client.Get().
+		Namespace(c.ns).
 		Resource("kinkies").
 		Name(name).
 		VersionedParams(&options, scheme.ParameterCodec).
@@ -71,6 +74,7 @@ func (c *kinkies) Get(name string, options v1.GetOptions) (result *v1alpha1.Kink
 func (c *kinkies) List(opts v1.ListOptions) (result *v1alpha1.KinkyList, err error) {
 	result = &v1alpha1.KinkyList{}
 	err = c.client.Get().
+		Namespace(c.ns).
 		Resource("kinkies").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Do().
@@ -82,6 +86,7 @@ func (c *kinkies) List(opts v1.ListOptions) (result *v1alpha1.KinkyList, err err
 func (c *kinkies) Watch(opts v1.ListOptions) (watch.Interface, error) {
 	opts.Watch = true
 	return c.client.Get().
+		Namespace(c.ns).
 		Resource("kinkies").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Watch()
@@ -91,6 +96,7 @@ func (c *kinkies) Watch(opts v1.ListOptions) (watch.Interface, error) {
 func (c *kinkies) Create(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err error) {
 	result = &v1alpha1.Kinky{}
 	err = c.client.Post().
+		Namespace(c.ns).
 		Resource("kinkies").
 		Body(kinky).
 		Do().
@@ -102,6 +108,7 @@ func (c *kinkies) Create(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err err
 func (c *kinkies) Update(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err error) {
 	result = &v1alpha1.Kinky{}
 	err = c.client.Put().
+		Namespace(c.ns).
 		Resource("kinkies").
 		Name(kinky.Name).
 		Body(kinky).
@@ -113,6 +120,7 @@ func (c *kinkies) Update(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err err
 // Delete takes name of the kinky and deletes it. Returns an error if one occurs.
 func (c *kinkies) Delete(name string, options *v1.DeleteOptions) error {
 	return c.client.Delete().
+		Namespace(c.ns).
 		Resource("kinkies").
 		Name(name).
 		Body(options).
@@ -123,6 +131,7 @@ func (c *kinkies) Delete(name string, options *v1.DeleteOptions) error {
 // DeleteCollection deletes a collection of objects.
 func (c *kinkies) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
 	return c.client.Delete().
+		Namespace(c.ns).
 		Resource("kinkies").
 		VersionedParams(&listOptions, scheme.ParameterCodec).
 		Body(options).
@@ -134,6 +143,7 @@ func (c *kinkies) DeleteCollection(options *v1.DeleteOptions, listOptions v1.Lis
 func (c *kinkies) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.Kinky, err error) {
 	result = &v1alpha1.Kinky{}
 	err = c.client.Patch(pt).
+		Namespace(c.ns).
 		Resource("kinkies").
 		SubResource(subresources...).
 		Name(name).

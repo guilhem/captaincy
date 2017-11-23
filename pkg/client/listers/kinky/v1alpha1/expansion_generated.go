@@ -21,3 +21,7 @@ package v1alpha1
 // KinkyListerExpansion allows custom methods to be added to
 // KinkyLister.
 type KinkyListerExpansion interface{}
+
+// KinkyNamespaceListerExpansion allows custom methods to be added to
+// KinkyNamespaceLister.
+type KinkyNamespaceListerExpansion interface{}

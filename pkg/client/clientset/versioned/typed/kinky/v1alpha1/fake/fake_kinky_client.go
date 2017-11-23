@@ -25,8 +25,8 @@ type FakeKinkyV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeKinkyV1alpha1) Kinkies() v1alpha1.KinkyInterface {
-	return &FakeKinkies{c}
+func (c *FakeKinkyV1alpha1) Kinkies(namespace string) v1alpha1.KinkyInterface {
+	return &FakeKinkies{c, namespace}
 }
 
 // RESTClient returns a RESTClient that is used to communicate

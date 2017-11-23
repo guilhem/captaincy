@@ -21,7 +21,6 @@ package v1alpha1
 import (
 	v1alpha1 "github.com/guilhem/captaincy/pkg/apis/kinky/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 )
@@ -30,8 +29,8 @@ import (
 type KinkyLister interface {
 	// List lists all Kinkies in the indexer.
 	List(selector labels.Selector) (ret []*v1alpha1.Kinky, err error)
-	// Get retrieves the Kinky from the index for a given name.
-	Get(name string) (*v1alpha1.Kinky, error)
+	// Kinkies returns an object that can list and get Kinkies.
+	Kinkies(namespace string) KinkyNamespaceLister
 	KinkyListerExpansion
 }
 
@@ -53,10 +52,38 @@ func (s *kinkyLister) List(selector labels.Selector) (ret []*v1alpha1.Kinky, err
 	return ret, err
 }
 
-// Get retrieves the Kinky from the index for a given name.
-func (s *kinkyLister) Get(name string) (*v1alpha1.Kinky, error) {
-	key := &v1alpha1.Kinky{ObjectMeta: v1.ObjectMeta{Name: name}}
-	obj, exists, err := s.indexer.Get(key)
+// Kinkies returns an object that can list and get Kinkies.
+func (s *kinkyLister) Kinkies(namespace string) KinkyNamespaceLister {
+	return kinkyNamespaceLister{indexer: s.indexer, namespace: namespace}
+}
+
+// KinkyNamespaceLister helps list and get Kinkies.
+type KinkyNamespaceLister interface {
+	// List lists all Kinkies in the indexer for a given namespace.
+	List(selector labels.Selector) (ret []*v1alpha1.Kinky, err error)
+	// Get retrieves the Kinky from the indexer for a given namespace and name.
+	Get(name string) (*v1alpha1.Kinky, error)
+	KinkyNamespaceListerExpansion
+}
+
+// kinkyNamespaceLister implements the KinkyNamespaceLister
+// interface.
+type kinkyNamespaceLister struct {
+	indexer   cache.Indexer
+	namespace string
+}
+
+// List lists all Kinkies in the indexer for a given namespace.
+func (s kinkyNamespaceLister) List(selector labels.Selector) (ret []*v1alpha1.Kinky, err error) {
+	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
+		ret = append(ret, m.(*v1alpha1.Kinky))
+	})
+	return ret, err
+}
+
+// Get retrieves the Kinky from the indexer for a given namespace and name.
+func (s kinkyNamespaceLister) Get(name string) (*v1alpha1.Kinky, error) {
+	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
 	if err != nil {
 		return nil, err
 	}

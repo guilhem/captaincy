@@ -32,8 +32,8 @@ type KinkyV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *KinkyV1alpha1Client) Kinkies() KinkyInterface {
-	return newKinkies(c)
+func (c *KinkyV1alpha1Client) Kinkies(namespace string) KinkyInterface {
+	return newKinkies(c, namespace)
 }
 
 // NewForConfig creates a new KinkyV1alpha1Client for the given config.

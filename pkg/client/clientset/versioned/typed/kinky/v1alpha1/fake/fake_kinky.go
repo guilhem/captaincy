@@ -28,6 +28,7 @@ import (
 // FakeKinkies implements KinkyInterface
 type FakeKinkies struct {
 	Fake *FakeKinkyV1alpha1
+	ns   string
 }
 
 var kinkiesResource = schema.GroupVersionResource{Group: "kinky", Version: "v1alpha1", Resource: "kinkies"}
@@ -37,7 +38,8 @@ var kinkiesKind = schema.GroupVersionKind{Group: "kinky", Version: "v1alpha1", K
 // Get takes name of the kinky, and returns the corresponding kinky object, and an error if there is any.
 func (c *FakeKinkies) Get(name string, options v1.GetOptions) (result *v1alpha1.Kinky, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(kinkiesResource, name), &v1alpha1.Kinky{})
+		Invokes(testing.NewGetAction(kinkiesResource, c.ns, name), &v1alpha1.Kinky{})
+
 	if obj == nil {
 		return nil, err
 	}
@@ -47,7 +49,8 @@ func (c *FakeKinkies) Get(name string, options v1.GetOptions) (result *v1alpha1.
 // List takes label and field selectors, and returns the list of Kinkies that match those selectors.
 func (c *FakeKinkies) List(opts v1.ListOptions) (result *v1alpha1.KinkyList, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(kinkiesResource, kinkiesKind, opts), &v1alpha1.KinkyList{})
+		Invokes(testing.NewListAction(kinkiesResource, kinkiesKind, c.ns, opts), &v1alpha1.KinkyList{})
+
 	if obj == nil {
 		return nil, err
 	}
@@ -68,13 +71,15 @@ func (c *FakeKinkies) List(opts v1.ListOptions) (result *v1alpha1.KinkyList, err
 // Watch returns a watch.Interface that watches the requested kinkies.
 func (c *FakeKinkies) Watch(opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(kinkiesResource, opts))
+		InvokesWatch(testing.NewWatchAction(kinkiesResource, c.ns, opts))
+
 }
 
 // Create takes the representation of a kinky and creates it.  Returns the server's representation of the kinky, and an error, if there is any.
 func (c *FakeKinkies) Create(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(kinkiesResource, kinky), &v1alpha1.Kinky{})
+		Invokes(testing.NewCreateAction(kinkiesResource, c.ns, kinky), &v1alpha1.Kinky{})
+
 	if obj == nil {
 		return nil, err
 	}
@@ -84,7 +89,8 @@ func (c *FakeKinkies) Create(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err
 // Update takes the representation of a kinky and updates it. Returns the server's representation of the kinky, and an error, if there is any.
 func (c *FakeKinkies) Update(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(kinkiesResource, kinky), &v1alpha1.Kinky{})
+		Invokes(testing.NewUpdateAction(kinkiesResource, c.ns, kinky), &v1alpha1.Kinky{})
+
 	if obj == nil {
 		return nil, err
 	}
@@ -94,13 +100,14 @@ func (c *FakeKinkies) Update(kinky *v1alpha1.Kinky) (result *v1alpha1.Kinky, err
 // Delete takes name of the kinky and deletes it. Returns an error if one occurs.
 func (c *FakeKinkies) Delete(name string, options *v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteAction(kinkiesResource, name), &v1alpha1.Kinky{})
+		Invokes(testing.NewDeleteAction(kinkiesResource, c.ns, name), &v1alpha1.Kinky{})
+
 	return err
 }
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeKinkies) DeleteCollection(options *v1.DeleteOptions, listOptions v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(kinkiesResource, listOptions)
+	action := testing.NewDeleteCollectionAction(kinkiesResource, c.ns, listOptions)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.KinkyList{})
 	return err
@@ -109,7 +116,8 @@ func (c *FakeKinkies) DeleteCollection(options *v1.DeleteOptions, listOptions v1
 // Patch applies the patch and returns the patched kinky.
 func (c *FakeKinkies) Patch(name string, pt types.PatchType, data []byte, subresources ...string) (result *v1alpha1.Kinky, err error) {
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(kinkiesResource, name, data, subresources...), &v1alpha1.Kinky{})
+		Invokes(testing.NewPatchSubresourceAction(kinkiesResource, c.ns, name, data, subresources...), &v1alpha1.Kinky{})
+
 	if obj == nil {
 		return nil, err
 	}
