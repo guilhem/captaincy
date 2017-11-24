@@ -3,13 +3,14 @@ package main
 import (
 	"crypto/x509"
 	"flag"
+	"fmt"
+	"net"
 
 	"fmt"
 	"net"
 
 	"github.com/golang/glog"
 
-	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/watch"
@@ -27,9 +28,11 @@ import (
 	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
 
 	certutil "k8s.io/client-go/util/cert"
+	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	certsphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs/pkiutil"
+	"k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
 )
 
 var (
@@ -76,11 +79,25 @@ func main() {
 			glog.Errorf("Error spawning ETCD operator: %v", err)
 		}
 
-		if err := createEtcdCluster(etcdClient, apiExtClient, cluster.Name, cluster.Namespace); err != nil {
+		etcdName := "etcd-" + cluster.Name
+
+		if err := createEtcdCluster(etcdClient, apiExtClient, etcdName, cluster.Namespace); err != nil {
 			glog.Errorf("Error spawning ETCD cluster: %v", err)
 		}
 		glog.Infof("Etcd created")
 		test(k8sClient, cluster.Namespace)
+
+		kubeadmCfg := kubeadm.MasterConfiguration{
+			Etcd: kubeadm.Etcd{
+				Endpoints: []string{"http://" + etcdName + ":2"},
+			},
+			Networking: kubeadm.Networking{
+				ServiceSubnet: "10.1.0.0/10",
+				PodSubnet: "192.168.0.0/16",
+			}
+		}
+
+		controlplane.GetStaticPodSpecs(kubeadmCfg, cluster.Spec.Version)
 	}
 
 }
@@ -163,7 +180,7 @@ func test(k8sClient *kubernetes.Clientset, ns string) error {
 		glog.Fatalf("failure while creating public key: %v", err)
 	}
 
-	secret := &v1.Secret{
+	secret := &apiv1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ns,
 			Name:      "pki-k8s",
