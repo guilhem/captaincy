@@ -19,6 +19,7 @@ import (
 	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
 
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
+	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
 
 	"k8s.io/kubernetes/pkg/util/version"
@@ -100,6 +101,18 @@ func main() {
 		}
 		pods := controlplane.GetStaticPodSpecs(kubeadmCfg, semK8sVersion)
 		for _, pod := range pods {
+			// We don't want to use host network
+			pod.Spec.HostNetwork = false
+			// Use secret instead of hostPath
+			for i, volume := range pod.Spec.Volumes {
+				if volume.Name == kubeadmconstants.KubeCertificatesVolumeName {
+					pod.Spec.Volumes[i].VolumeSource = apiv1.VolumeSource{
+						Secret: &apiv1.SecretVolumeSource{
+							SecretName: kubeadmconstants.KubeCertificatesVolumeName,
+						},
+					}
+				}
+			}
 			deploy := &appsv1beta1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: pod.Name,
