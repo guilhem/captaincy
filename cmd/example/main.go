@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"net"
 
-	"fmt"
-	"net"
-
 	"github.com/golang/glog"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +30,8 @@ import (
 	certsphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs/pkiutil"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
+
+	"k8s.io/kubernetes/pkg/util/version"
 )
 
 var (
@@ -87,17 +86,30 @@ func main() {
 		glog.Infof("Etcd created")
 		test(k8sClient, cluster.Namespace)
 
-		kubeadmCfg := kubeadm.MasterConfiguration{
+		kubeadmCfg := &kubeadm.MasterConfiguration{
 			Etcd: kubeadm.Etcd{
 				Endpoints: []string{"http://" + etcdName + ":2"},
 			},
 			Networking: kubeadm.Networking{
 				ServiceSubnet: "10.1.0.0/10",
-				PodSubnet: "192.168.0.0/16",
-			}
+				PodSubnet:     "192.168.0.0/16",
+			},
 		}
 
-		controlplane.GetStaticPodSpecs(kubeadmCfg, cluster.Spec.Version)
+		k8sVersion, err := version.ParseSemantic(cluster.Spec.Version)
+		if err != nil {
+			glog.Errorf("Fail to parse Version")
+		}
+		pods := controlplane.GetStaticPodSpecs(kubeadmCfg, k8sVersion)
+		for _, pod := range pods {
+			deploy := &appsv1beta1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "",
+				},
+			}
+			k8sClient.AppsV1beta1().Deployments(cluster.Namespace).Create(deploy)
+		}
+		fmt.Printf("pods %#v", pods)
 	}
 
 }
@@ -208,7 +220,7 @@ func test(k8sClient *kubernetes.Clientset, ns string) error {
 	return nil
 }
 
-func getSecretString(secret *v1.Secret, key string) string {
+func getSecretString(secret *apiv1.Secret, key string) string {
 	if secret.Data == nil {
 		return ""
 	}
