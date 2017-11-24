@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/x509"
 	"flag"
 
 	"github.com/golang/glog"
@@ -20,6 +21,14 @@ import (
 
 	etcdcluster "github.com/coreos/etcd-operator/pkg/apis/etcd/v1beta2"
 	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
+
+	"fmt"
+	"net"
+
+	certutil "k8s.io/client-go/util/cert"
+	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
+	certsphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
+	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs/pkiutil"
 )
 
 var (
@@ -71,7 +80,86 @@ func main() {
 		}
 		glog.Infof("Etcd created")
 	}
+}
 
+func test(k8sClient *kubernetes.Clientset) error {
+	caCert, caKey, _ := certsphase.NewCACertAndKey()
+	fmt.Printf("ca: %v - %v\n", caCert, caKey)
+
+	altNames := &certutil.AltNames{
+		DNSNames: []string{
+			"Default",
+			"kubernetes",
+			"kubernetes.default",
+			"kubernetes.default.svc",
+			fmt.Sprintf("kubernetes.default.svc.%s", "apiserver"),
+		},
+		IPs: []net.IP{
+			[]byte{10, 0, 0, 1},
+			[]byte{10, 0, 0, 2},
+		},
+	}
+	config := certutil.Config{
+		CommonName: kubeadmconstants.APIServerCertCommonName,
+		AltNames:   *altNames,
+		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+
+	apiCert, apiKey, err := pkiutil.NewCertAndKey(caCert, caKey, config)
+	if err != nil {
+		glog.Fatalf("failure while creating API server key and certificate: %v", err)
+	}
+
+	fmt.Printf("\napicert: %v, %v\n", apiKey, apiCert)
+
+	config = certutil.Config{
+		CommonName:   kubeadmconstants.APIServerKubeletClientCertCommonName,
+		Organization: []string{kubeadmconstants.MastersGroup},
+		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	apiClientCert, apiClientKey, err := pkiutil.NewCertAndKey(caCert, caKey, config)
+	if err != nil {
+		glog.Fatalf("failure while creating API server kubelet client key and certificate: %v", err)
+	}
+
+	fmt.Printf("\napicliencert: %v, %v\n", apiClientCert, apiClientKey)
+
+	saSigningKey, err := certutil.NewPrivateKey()
+	if err != nil {
+		glog.Fatalf("failure while creating service account token signing key: %v", err)
+	}
+	fmt.Printf("\nsaSigningKey: %v\n", saSigningKey)
+
+	frontProxyCACert, frontProxyCAKey, err := pkiutil.NewCertificateAuthority()
+	if err != nil {
+		glog.Fatalf("failure while generating front-proxy CA certificate and key: %v", err)
+	}
+	fmt.Printf("\nfrontProxyCACert: %v, %v\n", frontProxyCACert, frontProxyCAKey)
+
+	config = certutil.Config{
+		CommonName: kubeadmconstants.FrontProxyClientCertCommonName,
+		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	frontProxyClientCert, frontProxyClientKey, err := pkiutil.NewCertAndKey(frontProxyCACert, frontProxyCAKey, config)
+	if err != nil {
+		glog.Fatalf("failure while creating front-proxy client key and certificate: %v", err)
+	}
+	fmt.Printf("\nfrontProxyClientCert: %v, %v\n", frontProxyClientCert, frontProxyClientKey)
+	// // PHASE 1: Generate certificates
+	// if err := certsphase.CreatePKIAssets(i.cfg); err != nil {
+	// 	return err
+	// }
+	//
+	// // PHASE 2: Generate kubeconfig files for the admin and the kubelet
+	// if err := kubeconfigphase.CreateInitKubeConfigFiles(kubeConfigDir, i.cfg); err != nil {
+	// 	return err
+	// }
+
+	_, err = k8sClient.CoreV1().Secrets("Default").Create(nil)
+	if err != nil {
+		return fmt.Errorf("failed to list bootstrap tokens [%v]", err)
+	}
+	return nil
 }
 
 func createEtcdOperator(client *kubernetes.Clientset, ns string) error {
