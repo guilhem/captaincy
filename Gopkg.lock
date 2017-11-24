@@ -206,6 +206,12 @@
   revision = "81aa34336d28aadc3a8e8da7dfd9258c5157e5e4"
 
 [[projects]]
+  branch = "master"
+  name = "k8s.io/apiextensions-apiserver"
+  packages = ["pkg/apis/apiextensions","pkg/apis/apiextensions/v1beta1","pkg/client/clientset/clientset","pkg/client/clientset/clientset/scheme","pkg/client/clientset/clientset/typed/apiextensions/v1beta1"]
+  revision = "51a1910459f074162eb4e25233e461fe91e99405"
+
+[[projects]]
   branch = "release-1.8"
   name = "k8s.io/apimachinery"
   packages = ["pkg/api/equality","pkg/api/errors","pkg/api/meta","pkg/api/resource","pkg/apis/meta/internalversion","pkg/apis/meta/v1","pkg/apis/meta/v1/unstructured","pkg/apis/meta/v1alpha1","pkg/conversion","pkg/conversion/queryparams","pkg/conversion/unstructured","pkg/fields","pkg/labels","pkg/runtime","pkg/runtime/schema","pkg/runtime/serializer","pkg/runtime/serializer/json","pkg/runtime/serializer/protobuf","pkg/runtime/serializer/recognizer","pkg/runtime/serializer/streaming","pkg/runtime/serializer/versioning","pkg/selection","pkg/types","pkg/util/cache","pkg/util/clock","pkg/util/diff","pkg/util/errors","pkg/util/framer","pkg/util/intstr","pkg/util/json","pkg/util/net","pkg/util/runtime","pkg/util/sets","pkg/util/validation","pkg/util/validation/field","pkg/util/wait","pkg/util/yaml","pkg/version","pkg/watch","third_party/forked/golang/reflect"]
@@ -214,7 +220,7 @@
 [[projects]]
   branch = "release-5.0"
   name = "k8s.io/client-go"
-  packages = ["discovery","discovery/fake","kubernetes/scheme","pkg/version","rest","rest/watch","testing","tools/auth","tools/cache","tools/clientcmd","tools/clientcmd/api","tools/clientcmd/api/latest","tools/clientcmd/api/v1","tools/metrics","tools/pager","transport","util/cert","util/flowcontrol","util/homedir","util/integer"]
+  packages = ["discovery","discovery/fake","kubernetes","kubernetes/scheme","kubernetes/typed/admissionregistration/v1alpha1","kubernetes/typed/apps/v1beta1","kubernetes/typed/apps/v1beta2","kubernetes/typed/authentication/v1","kubernetes/typed/authentication/v1beta1","kubernetes/typed/authorization/v1","kubernetes/typed/authorization/v1beta1","kubernetes/typed/autoscaling/v1","kubernetes/typed/autoscaling/v2beta1","kubernetes/typed/batch/v1","kubernetes/typed/batch/v1beta1","kubernetes/typed/batch/v2alpha1","kubernetes/typed/certificates/v1beta1","kubernetes/typed/core/v1","kubernetes/typed/extensions/v1beta1","kubernetes/typed/networking/v1","kubernetes/typed/policy/v1beta1","kubernetes/typed/rbac/v1","kubernetes/typed/rbac/v1alpha1","kubernetes/typed/rbac/v1beta1","kubernetes/typed/scheduling/v1alpha1","kubernetes/typed/settings/v1alpha1","kubernetes/typed/storage/v1","kubernetes/typed/storage/v1beta1","pkg/version","rest","rest/watch","testing","tools/auth","tools/cache","tools/clientcmd","tools/clientcmd/api","tools/clientcmd/api/latest","tools/clientcmd/api/v1","tools/metrics","tools/pager","tools/reference","transport","util/cert","util/flowcontrol","util/homedir","util/integer"]
   revision = "afb4606c45bae77c4dc2c15291d4d7d6d792196c"
 
 [[projects]]
@@ -237,6 +243,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "f2c998425760a43b99cf6b441f683aa0cf32e61691a87aee1c642a3eb6fa757a"
+  inputs-digest = "0ec5eb29983b4c88dcd225190afc5e8632e00dc1da90efed4182db0fa247a925"
   solver-name = "gps-cdcl"
   solver-version = 1
