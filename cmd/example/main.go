@@ -40,11 +40,6 @@ func main() {
 		glog.Fatalf("Error building captaincy clientset: %v", err)
 	}
 
-	list, err := captaincyClient.KinkyV1alpha1().Kinkies(metav1.NamespaceAll).List(metav1.ListOptions{})
-	if err != nil {
-		glog.Fatalf("Error listing all kinkies: %v", err)
-	}
-
 	etcdClient, err := etcdclientset.NewForConfig(cfg)
 	if err != nil {
 		glog.Fatalf("Error building etcd clientset: %v", err)
@@ -60,37 +55,18 @@ func main() {
 		glog.Fatalf("Error building etcd clientset: %v", err)
 	}
 
+	list, err := captaincyClient.KinkyV1alpha1().Kinkies(metav1.NamespaceAll).List(metav1.ListOptions{})
+	if err != nil {
+		glog.Fatalf("Error listing all kinkies: %v", err)
+	}
+
 	for _, cluster := range list.Items {
 
 		if err := createEtcdOperator(k8sClient, cluster.Namespace); err != nil {
 			glog.Errorf("Error spawning ETCD operator: %v", err)
 		}
 
-		if _, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("etcdclusters.etcd.database.coreos.com", metav1.GetOptions{}); err != nil {
-
-			wi, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Watch(metav1.ListOptions{
-				TimeoutSeconds: int64Ptr(30),
-				FieldSelector:  fields.OneTermEqualSelector("metadata.name", "etcdclusters.etcd.database.coreos.com").String(),
-			})
-			if err != nil {
-				glog.Errorf("Error spawning ETCD cluster: %v", err)
-			}
-			defer wi.Stop()
-
-			select {
-			case watchEvent := <-wi.ResultChan():
-				if watch.Added == watchEvent.Type {
-					glog.Info("etcd operator register")
-					wi.Stop()
-				} else {
-					glog.Errorf("expected add, but got %#v", watchEvent)
-				}
-			}
-		} else {
-			glog.Info("etcdclusters.etcd.database.coreos.com exist")
-		}
-
-		if err := createEtcdCluster(etcdClient, cluster.Name, cluster.Namespace); err != nil {
+		if err := createEtcdCluster(etcdClient, apiExtClient, cluster.Name, cluster.Namespace); err != nil {
 			glog.Errorf("Error spawning ETCD cluster: %v", err)
 		}
 		glog.Infof("Etcd created")
@@ -149,7 +125,31 @@ func createEtcdOperator(client *kubernetes.Clientset, ns string) error {
 	return err
 }
 
-func createEtcdCluster(client *etcdclientset.Clientset, name string, ns string) error {
+func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensionsclientset.Clientset, name string, ns string) error {
+	if _, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("etcdclusters.etcd.database.coreos.com", metav1.GetOptions{}); err != nil {
+
+		wi, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Watch(metav1.ListOptions{
+			TimeoutSeconds: int64Ptr(30),
+			FieldSelector:  fields.OneTermEqualSelector("metadata.name", "etcdclusters.etcd.database.coreos.com").String(),
+		})
+		if err != nil {
+			glog.Errorf("Error spawning ETCD cluster: %v", err)
+		}
+		defer wi.Stop()
+
+		select {
+		case watchEvent := <-wi.ResultChan():
+			if watch.Added == watchEvent.Type {
+				glog.Info("etcd operator register")
+				wi.Stop()
+			} else {
+				glog.Errorf("expected add, but got %#v", watchEvent)
+			}
+		}
+	} else {
+		glog.Info("etcdclusters.etcd.database.coreos.com exist")
+	}
+
 	if _, err := client.EtcdV1beta2().EtcdClusters(ns).Get(name, metav1.GetOptions{}); err == nil {
 		return nil
 	}
