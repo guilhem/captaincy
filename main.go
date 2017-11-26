@@ -2,10 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"net"
 
 	"github.com/golang/glog"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/clientcmd"
 
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
@@ -31,7 +34,7 @@ var (
 )
 
 const (
-	defaultK8sVersion = "1.8.4"
+	kubeconfigSecret = "kubeconfig"
 )
 
 func main() {
@@ -75,18 +78,51 @@ func main() {
 
 		etcdName := "etcd-" + cluster.Name
 
-		if err := createEtcdCluster(etcdClient, apiExtClient, etcdName, cluster.Namespace); err != nil {
+		etcdCluster, err := createEtcdCluster(etcdClient, apiExtClient, etcdName, cluster.Namespace)
+
+		if err != nil {
 			glog.Errorf("Error spawning ETCD cluster: %v", err)
 		}
+
 		glog.Infof("Etcd created")
-		test(k8sClient, cluster.Namespace)
+
+		apiService := &apiv1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "kube-apiserver",
+				Labels: map[string]string{
+					"component": "kube-apiserver",
+					"tier":      "control-plane",
+				},
+			},
+			Spec: apiv1.ServiceSpec{
+				Ports: []apiv1.ServicePort{
+					{
+						Name:       "https",
+						Port:       443,
+						TargetPort: intstr.Parse("secure"),
+						Protocol:   "TCP",
+					},
+				},
+			},
+		}
+
+		if _, err := k8sClient.CoreV1().Services(cluster.Namespace).Create(apiService); err != nil {
+			glog.Errorf("Fail service: %v", err)
+		}
+
+		svc, err := k8sClient.CoreV1().Services(cluster.Namespace).Get("kube-apiserver", metav1.GetOptions{})
+		if err != nil {
+			glog.Errorf("Fail service: %v", err)
+		}
+		apiIP := svc.Spec.ClusterIP
 
 		kubeadmCfg := &kubeadm.MasterConfiguration{
 			Etcd: kubeadm.Etcd{
-				Endpoints: []string{"http://" + etcdName + "-client:2379"},
+				Endpoints: []string{fmt.Sprintf("http://%s:%d", etcdCluster.Status.ServiceName, etcdCluster.Status.ClientPort)},
 			},
 			API: kubeadm.API{
-				AdvertiseAddress: "1.2.3.4",
+				AdvertiseAddress: apiIP,
+				BindPort:         443,
 			},
 		}
 		if cluster.Spec.Version != "" {
@@ -94,6 +130,10 @@ func main() {
 		}
 
 		SetDefaults_MasterConfiguration(kubeadmCfg)
+
+		if err := test(k8sClient, kubeadmCfg, cluster.Namespace, []net.IP{}); err != nil {
+			glog.Errorf("Create certificates and configs fail: %v", err)
+		}
 
 		semK8sVersion, err := version.ParseSemantic(kubeadmCfg.KubernetesVersion)
 		if err != nil {
@@ -112,6 +152,29 @@ func main() {
 						},
 					}
 				}
+				if volume.Name == kubeadmconstants.KubeConfigVolumeName {
+					pod.Spec.Volumes[i].VolumeSource = apiv1.VolumeSource{
+						Secret: &apiv1.SecretVolumeSource{
+							SecretName: kubeconfigSecret,
+						},
+					}
+					for iC, container := range pod.Spec.Containers {
+						for iVM, volumeMount := range container.VolumeMounts {
+							if volumeMount.Name == kubeadmconstants.KubeConfigVolumeName {
+								pod.Spec.Containers[iC].VolumeMounts[iVM].MountPath = kubeadmconstants.KubernetesDir
+							}
+						}
+					}
+				}
+			}
+			// add exposed secured port to api-server
+			if pod.Name == "kube-apiserver" {
+				pod.Spec.Containers[0].Ports = []apiv1.ContainerPort{
+					{
+						ContainerPort: 6443,
+						Name:          "secure",
+					},
+				}
 			}
 			deploy := &appsv1beta1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
@@ -126,7 +189,9 @@ func main() {
 				},
 			}
 			if _, err := k8sClient.AppsV1beta1().Deployments(cluster.Namespace).Create(deploy); err != nil {
-				glog.Errorf("Pod deployment fail: %v", err)
+				if _, err := k8sClient.AppsV1beta1().Deployments(cluster.Namespace).Update(deploy); err != nil {
+					glog.Errorf("Pod deployment fail: %v", err)
+				}
 			}
 		}
 	}

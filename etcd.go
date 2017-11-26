@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	etcdcluster "github.com/coreos/etcd-operator/pkg/apis/etcd/v1beta2"
+	etcdv1beta2 "github.com/coreos/etcd-operator/pkg/apis/etcd/v1beta2"
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +66,7 @@ func createEtcdOperator(client *kubernetes.Clientset, ns string) error {
 	return err
 }
 
-func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensionsclientset.Clientset, name string, ns string) error {
+func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensionsclientset.Clientset, name string, ns string) (*etcdv1beta2.EtcdCluster, error) {
 	if _, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("etcdclusters.etcd.database.coreos.com", metav1.GetOptions{}); err != nil {
 
 		wi, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Watch(metav1.ListOptions{
@@ -91,22 +91,21 @@ func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensi
 		glog.Info("etcdclusters.etcd.database.coreos.com exist")
 	}
 
-	if _, err := client.EtcdV1beta2().EtcdClusters(ns).Get(name, metav1.GetOptions{}); err == nil {
-		return nil
+	if etcdCluster, err := client.EtcdV1beta2().EtcdClusters(ns).Get(name, metav1.GetOptions{}); err == nil {
+		return etcdCluster, nil
 	}
 
-	etcdCl := etcdcluster.EtcdCluster{
+	etcdCl := etcdv1beta2.EtcdCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Labels: map[string]string{
 				"captaincy": "kinky",
 			},
 		},
-		Spec: etcdcluster.ClusterSpec{
-			Size: 3,
+		Spec: etcdv1beta2.ClusterSpec{
+			Size: 1,
 		},
 	}
 
-	_, err := client.EtcdV1beta2().EtcdClusters(ns).Create(&etcdCl)
-	return err
+	return client.EtcdV1beta2().EtcdClusters(ns).Create(&etcdCl)
 }

@@ -1,22 +1,31 @@
 package main
 
 import (
+	"crypto/rsa"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
+	"strconv"
 
 	"github.com/golang/glog"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs/pkiutil"
+	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	kubeadmapi "k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
+
 	certutil "k8s.io/client-go/util/cert"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	certsphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
 )
 
-func test(k8sClient *kubernetes.Clientset, ns string) error {
+func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, ns string, ips []net.IP) error {
 	caCert, caKey, _ := certsphase.NewCACertAndKey()
 	// fmt.Printf("ca: %v - %v\n", caCert, caKey)
 
@@ -28,11 +37,9 @@ func test(k8sClient *kubernetes.Clientset, ns string) error {
 			"kubernetes.default.svc",
 			fmt.Sprintf("kubernetes.default.svc.%s", "apiserver"),
 		},
-		IPs: []net.IP{
-			[]byte{10, 0, 0, 1},
-			[]byte{10, 0, 0, 2},
-		},
+		IPs: ips,
 	}
+
 	config := certutil.Config{
 		CommonName: kubeadmconstants.APIServerCertCommonName,
 		AltNames:   *altNames,
@@ -44,8 +51,6 @@ func test(k8sClient *kubernetes.Clientset, ns string) error {
 		glog.Fatalf("failure while creating API server key and certificate: %v", err)
 	}
 
-	// fmt.Printf("\napicert: %v, %v\n", apiKey, apiCert)
-
 	config = certutil.Config{
 		CommonName:   kubeadmconstants.APIServerKubeletClientCertCommonName,
 		Organization: []string{kubeadmconstants.MastersGroup},
@@ -56,19 +61,15 @@ func test(k8sClient *kubernetes.Clientset, ns string) error {
 		glog.Fatalf("failure while creating API server kubelet client key and certificate: %v", err)
 	}
 
-	// fmt.Printf("\napicliencert: %v, %v\n", apiClientCert, apiClientKey)
-
 	saSigningKey, err := certutil.NewPrivateKey()
 	if err != nil {
 		glog.Fatalf("failure while creating service account token signing key: %v", err)
 	}
-	fmt.Printf("\nsaSigningKey: %v\n", saSigningKey)
 
 	frontProxyCACert, frontProxyCAKey, err := pkiutil.NewCertificateAuthority()
 	if err != nil {
 		glog.Fatalf("failure while generating front-proxy CA certificate and key: %v", err)
 	}
-	// fmt.Printf("\nfrontProxyCACert: %v, %v\n", frontProxyCACert, frontProxyCAKey)
 
 	config = certutil.Config{
 		CommonName: kubeadmconstants.FrontProxyClientCertCommonName,
@@ -116,7 +117,48 @@ func test(k8sClient *kubernetes.Clientset, ns string) error {
 	}
 
 	if _, err := k8sClient.CoreV1().Secrets(ns).Create(secret); err != nil {
-		return fmt.Errorf("failed to list bootstrap tokens [%v]", err)
+		if _, err := k8sClient.CoreV1().Secrets(ns).Update(secret); err != nil {
+			return err
+		}
+	}
+
+	kubeConfigs, err := createKubeConfigFiles(cfg, caCert, caKey)
+	if err != nil {
+		return err
+	}
+
+	schedulerConfig, ok := kubeConfigs[kubeadmconstants.SchedulerKubeConfigFileName]
+	if !ok {
+		return errors.New("No Scheduler Kubeconfig found")
+	}
+	controllerConfig, ok := kubeConfigs[kubeadmconstants.ControllerManagerKubeConfigFileName]
+	if !ok {
+		return errors.New("No Controller Kubeconfig found")
+	}
+
+	schedulerFile, err := clientcmd.Write(*schedulerConfig)
+	if err != nil {
+		return err
+	}
+	controllerFile, err := clientcmd.Write(*controllerConfig)
+	if err != nil {
+		return err
+	}
+
+	secret = &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: ns,
+			Name:      kubeconfigSecret,
+		},
+		Data: map[string][]byte{
+			kubeadmconstants.SchedulerKubeConfigFileName:         schedulerFile,
+			kubeadmconstants.ControllerManagerKubeConfigFileName: controllerFile,
+		},
+	}
+	if _, err := k8sClient.CoreV1().Secrets(ns).Create(secret); err != nil {
+		if _, err := k8sClient.CoreV1().Secrets(ns).Update(secret); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -130,4 +172,129 @@ func getSecretString(secret *v1.Secret, key string) string {
 		return string(val)
 	}
 	return ""
+}
+
+func createKubeConfigFiles(cfg *kubeadmapi.MasterConfiguration, caCert *x509.Certificate, caKey *rsa.PrivateKey) (map[string]*clientcmdapi.Config, error) {
+	configs := make(map[string]*clientcmdapi.Config)
+	// gets the KubeConfigSpecs, actualized for the current MasterConfiguration
+	specs, err := getKubeConfigSpecs(cfg, caCert, caKey)
+	if err != nil {
+		return configs, err
+	}
+
+	for key, spec := range specs {
+		// builds the KubeConfig object
+		config, err := buildKubeConfigFromSpec(spec)
+		if err != nil {
+			return configs, err
+		}
+		configs[key] = config
+	}
+
+	return configs, nil
+}
+
+/// Copy of kubeadm code
+
+// clientCertAuth struct holds info required to build a client certificate to provide authentication info in a kubeconfig object
+type clientCertAuth struct {
+	CAKey         *rsa.PrivateKey
+	Organizations []string
+}
+
+// tokenAuth struct holds info required to use a token to provide authentication info in a kubeconfig object
+type tokenAuth struct {
+	Token string
+}
+
+// kubeConfigSpec struct holds info required to build a KubeConfig object
+type kubeConfigSpec struct {
+	CACert         *x509.Certificate
+	APIServer      string
+	ClientName     string
+	TokenAuth      *tokenAuth
+	ClientCertAuth *clientCertAuth
+}
+
+// buildKubeConfigFromSpec creates a kubeconfig object for the given kubeConfigSpec
+func buildKubeConfigFromSpec(spec *kubeConfigSpec) (*clientcmdapi.Config, error) {
+
+	// If this kubeconfig should use token
+	if spec.TokenAuth != nil {
+		// create a kubeconfig with a token
+		return kubeconfigutil.CreateWithToken(
+			spec.APIServer,
+			"kubernetes",
+			spec.ClientName,
+			certutil.EncodeCertPEM(spec.CACert),
+			spec.TokenAuth.Token,
+		), nil
+	}
+
+	// otherwise, create a client certs
+	clientCertConfig := certutil.Config{
+		CommonName:   spec.ClientName,
+		Organization: spec.ClientCertAuth.Organizations,
+		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	clientCert, clientKey, err := pkiutil.NewCertAndKey(spec.CACert, spec.ClientCertAuth.CAKey, clientCertConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failure while creating %s client certificate: %v", spec.ClientName, err)
+	}
+
+	// create a kubeconfig with the client certs
+	return kubeconfigutil.CreateWithCerts(
+		spec.APIServer,
+		"kubernetes",
+		spec.ClientName,
+		certutil.EncodeCertPEM(spec.CACert),
+		certutil.EncodePrivateKeyPEM(clientKey),
+		certutil.EncodeCertPEM(clientCert),
+	), nil
+}
+
+// getKubeConfigSpecs returns all KubeConfigSpecs actualized to the context of the current MasterConfiguration
+// NB. this methods holds the information about how kubeadm creates kubeconfig files.
+func getKubeConfigSpecs(cfg *kubeadmapi.MasterConfiguration, caCert *x509.Certificate, caKey *rsa.PrivateKey) (map[string]*kubeConfigSpec, error) {
+
+	masterEndpoint := net.JoinHostPort(cfg.API.AdvertiseAddress, strconv.Itoa(int(cfg.API.BindPort)))
+
+	var kubeConfigSpec = map[string]*kubeConfigSpec{
+		kubeadmconstants.AdminKubeConfigFileName: {
+			CACert:     caCert,
+			APIServer:  masterEndpoint,
+			ClientName: "kubernetes-admin",
+			ClientCertAuth: &clientCertAuth{
+				CAKey:         caKey,
+				Organizations: []string{kubeadmconstants.MastersGroup},
+			},
+		},
+		kubeadmconstants.KubeletKubeConfigFileName: {
+			CACert:     caCert,
+			APIServer:  masterEndpoint,
+			ClientName: fmt.Sprintf("system:node:%s", cfg.NodeName),
+			ClientCertAuth: &clientCertAuth{
+				CAKey:         caKey,
+				Organizations: []string{kubeadmconstants.NodesGroup},
+			},
+		},
+		kubeadmconstants.ControllerManagerKubeConfigFileName: {
+			CACert:     caCert,
+			APIServer:  masterEndpoint,
+			ClientName: kubeadmconstants.ControllerManagerUser,
+			ClientCertAuth: &clientCertAuth{
+				CAKey: caKey,
+			},
+		},
+		kubeadmconstants.SchedulerKubeConfigFileName: {
+			CACert:     caCert,
+			APIServer:  masterEndpoint,
+			ClientName: kubeadmconstants.SchedulerUser,
+			ClientCertAuth: &clientCertAuth{
+				CAKey: caKey,
+			},
+		},
+	}
+
+	return kubeConfigSpec, nil
 }
