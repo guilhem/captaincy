@@ -4,11 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/golang/glog"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/clientcmd"
 
 	appsv1beta1 "k8s.io/api/apps/v1beta1"
@@ -79,7 +81,6 @@ func main() {
 		etcdName := "etcd-" + cluster.Name
 
 		etcdCluster, err := createEtcdCluster(etcdClient, apiExtClient, etcdName, cluster.Namespace)
-
 		if err != nil {
 			glog.Errorf("Error spawning ETCD cluster: %v", err)
 		}
@@ -95,11 +96,15 @@ func main() {
 				},
 			},
 			Spec: apiv1.ServiceSpec{
+				Selector: map[string]string{
+					"component": "kube-apiserver",
+					"tier":      "control-plane",
+				},
 				Ports: []apiv1.ServicePort{
 					{
 						Name:       "https",
 						Port:       443,
-						TargetPort: intstr.Parse("secure"),
+						TargetPort: intstr.Parse("443"),
 						Protocol:   "TCP",
 					},
 				},
@@ -110,6 +115,20 @@ func main() {
 			glog.Errorf("Fail service: %v", err)
 		}
 
+		// Wait for API service to have an IP
+		if err := wait.Poll(5*time.Second, 30*time.Minute, func() (bool, error) {
+			svc, err := k8sClient.CoreV1().Services(cluster.Namespace).Get("kube-apiserver", metav1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+			if svc.Spec.ClusterIP == "" {
+				return false, nil
+			}
+			return true, nil
+
+		}); err != nil {
+			glog.Errorf("error while checking pod status: %v", err)
+		}
 		svc, err := k8sClient.CoreV1().Services(cluster.Namespace).Get("kube-apiserver", metav1.GetOptions{})
 		if err != nil {
 			glog.Errorf("Fail service: %v", err)
@@ -131,7 +150,7 @@ func main() {
 
 		SetDefaults_MasterConfiguration(kubeadmCfg)
 
-		if err := test(k8sClient, kubeadmCfg, cluster.Namespace, []net.IP{}); err != nil {
+		if err := test(k8sClient, kubeadmCfg, cluster.Namespace, []net.IP{net.ParseIP(apiIP)}); err != nil {
 			glog.Errorf("Create certificates and configs fail: %v", err)
 		}
 
@@ -171,7 +190,7 @@ func main() {
 			if pod.Name == "kube-apiserver" {
 				pod.Spec.Containers[0].Ports = []apiv1.ContainerPort{
 					{
-						ContainerPort: 6443,
+						ContainerPort: 443,
 						Name:          "secure",
 					},
 				}

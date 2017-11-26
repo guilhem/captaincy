@@ -257,7 +257,7 @@ func buildKubeConfigFromSpec(spec *kubeConfigSpec) (*clientcmdapi.Config, error)
 // NB. this methods holds the information about how kubeadm creates kubeconfig files.
 func getKubeConfigSpecs(cfg *kubeadmapi.MasterConfiguration, caCert *x509.Certificate, caKey *rsa.PrivateKey) (map[string]*kubeConfigSpec, error) {
 
-	masterEndpoint := net.JoinHostPort(cfg.API.AdvertiseAddress, strconv.Itoa(int(cfg.API.BindPort)))
+	masterEndpoint := "https://" + net.JoinHostPort(cfg.API.AdvertiseAddress, strconv.Itoa(int(cfg.API.BindPort)))
 
 	var kubeConfigSpec = map[string]*kubeConfigSpec{
 		kubeadmconstants.AdminKubeConfigFileName: {

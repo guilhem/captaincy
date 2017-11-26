@@ -107,5 +107,6 @@ func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensi
 		},
 	}
 
-	return client.EtcdV1beta2().EtcdClusters(ns).Create(&etcdCl)
+	client.EtcdV1beta2().EtcdClusters(ns).Create(&etcdCl)
+	return client.EtcdV1beta2().EtcdClusters(ns).Get(name, metav1.GetOptions{})
 }
