@@ -1,5 +1,5 @@
-hash: 3d31320001565bc6622e7221e4f1c02ae80843fb8a8b89816694a2209588a03e
-updated: 2017-11-24T08:03:43.565313755+01:00
+hash: 98b9b64d17ccee1ae5016d8147a402870bd22bdac14dff2db85132b8a1d05108
+updated: 2017-12-07T00:25:38.274319327+01:00
 imports:
 - name: bitbucket.org/ww/goautoneg
   version: '***'
@@ -497,7 +497,7 @@ imports:
   - monitoring/v3
   - pubsub/v1
 - name: google.golang.org/appengine
-  version: 9d8544a6b2c7df9cff240fcf92d7b2f59bc13416
+  version: 4f7eeb5305a4ba1966344836ba4af9996b7b4e05
   subpackages:
   - internal
   - internal/app_identity
@@ -572,7 +572,7 @@ imports:
   - storage/v1
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
-  version: e509bb64fe1116e12a32273a2032426aa1a5fd26
+  version: 5bc0d8f05a92b3a09bcf1a9db442a29c0b7a514d
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
@@ -766,31 +766,56 @@ imports:
   - informers/storage/v1
   - informers/storage/v1beta1
   - kubernetes
+  - kubernetes/fake
   - kubernetes/scheme
   - kubernetes/typed/admissionregistration/v1alpha1
+  - kubernetes/typed/admissionregistration/v1alpha1/fake
   - kubernetes/typed/apps/v1beta1
+  - kubernetes/typed/apps/v1beta1/fake
   - kubernetes/typed/apps/v1beta2
+  - kubernetes/typed/apps/v1beta2/fake
   - kubernetes/typed/authentication/v1
+  - kubernetes/typed/authentication/v1/fake
   - kubernetes/typed/authentication/v1beta1
+  - kubernetes/typed/authentication/v1beta1/fake
   - kubernetes/typed/authorization/v1
+  - kubernetes/typed/authorization/v1/fake
   - kubernetes/typed/authorization/v1beta1
+  - kubernetes/typed/authorization/v1beta1/fake
   - kubernetes/typed/autoscaling/v1
+  - kubernetes/typed/autoscaling/v1/fake
   - kubernetes/typed/autoscaling/v2beta1
+  - kubernetes/typed/autoscaling/v2beta1/fake
   - kubernetes/typed/batch/v1
+  - kubernetes/typed/batch/v1/fake
   - kubernetes/typed/batch/v1beta1
+  - kubernetes/typed/batch/v1beta1/fake
   - kubernetes/typed/batch/v2alpha1
+  - kubernetes/typed/batch/v2alpha1/fake
   - kubernetes/typed/certificates/v1beta1
+  - kubernetes/typed/certificates/v1beta1/fake
   - kubernetes/typed/core/v1
+  - kubernetes/typed/core/v1/fake
   - kubernetes/typed/extensions/v1beta1
+  - kubernetes/typed/extensions/v1beta1/fake
   - kubernetes/typed/networking/v1
+  - kubernetes/typed/networking/v1/fake
   - kubernetes/typed/policy/v1beta1
+  - kubernetes/typed/policy/v1beta1/fake
   - kubernetes/typed/rbac/v1
+  - kubernetes/typed/rbac/v1/fake
   - kubernetes/typed/rbac/v1alpha1
+  - kubernetes/typed/rbac/v1alpha1/fake
   - kubernetes/typed/rbac/v1beta1
+  - kubernetes/typed/rbac/v1beta1/fake
   - kubernetes/typed/scheduling/v1alpha1
+  - kubernetes/typed/scheduling/v1alpha1/fake
   - kubernetes/typed/settings/v1alpha1
+  - kubernetes/typed/settings/v1alpha1/fake
   - kubernetes/typed/storage/v1
+  - kubernetes/typed/storage/v1/fake
   - kubernetes/typed/storage/v1beta1
+  - kubernetes/typed/storage/v1beta1/fake
   - listers/admissionregistration/v1alpha1
   - listers/apps/v1beta1
   - listers/apps/v1beta2
@@ -858,6 +883,8 @@ imports:
   - cmd/kubeadm/app/phases/controlplane
   - cmd/kubeadm/app/preflight
   - cmd/kubeadm/app/util
+  - cmd/kubeadm/app/util/apiclient
+  - cmd/kubeadm/app/util/kubeconfig
   - cmd/kubeadm/app/util/staticpod
   - pkg/api
   - pkg/api/helper
@@ -1130,7 +1157,7 @@ imports:
   - third_party/forked/gonum/graph/simple
   - third_party/forked/gonum/graph/traverse
 - name: k8s.io/metrics
-  version: 57c465e2a974054e05a96b787009f81bc010092a
+  version: 51ef1f2130dc881bd0b1482c94c1fec441621b8a
   subpackages:
   - pkg/apis/metrics
   - pkg/apis/metrics/v1alpha1

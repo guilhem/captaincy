@@ -1,30 +1,32 @@
 package main
 
 import (
-	"github.com/golang/glog"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/watch"
+	"fmt"
+	"time"
+
 	"k8s.io/client-go/kubernetes"
 
 	etcdv1beta2 "github.com/coreos/etcd-operator/pkg/apis/etcd/v1beta2"
-	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	apiv1 "k8s.io/api/core/v1"
+	extv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 )
 
 func createEtcdOperator(client *kubernetes.Clientset, ns string) error {
-	if _, err := client.AppsV1beta1().Deployments(ns).Get("etcd-operator", metav1.GetOptions{}); err == nil {
-		return nil
-	}
 
-	deployment := &appsv1beta1.Deployment{
+	deployment := &extv1beta1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "etcd-operator",
+			Name:      "etcd-operator",
+			Namespace: ns,
 		},
-		Spec: appsv1beta1.DeploymentSpec{
+		Spec: extv1beta1.DeploymentSpec{
 			Replicas: int32Ptr(1),
 			Template: apiv1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -62,42 +64,20 @@ func createEtcdOperator(client *kubernetes.Clientset, ns string) error {
 			},
 		},
 	}
-	_, err := client.AppsV1beta1().Deployments(ns).Create(deployment)
-	return err
+
+	return apiclient.CreateOrUpdateDeployment(client, deployment)
 }
 
 func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensionsclientset.Clientset, name string, ns string) (*etcdv1beta2.EtcdCluster, error) {
-	if _, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get("etcdclusters.etcd.database.coreos.com", metav1.GetOptions{}); err != nil {
 
-		wi, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Watch(metav1.ListOptions{
-			TimeoutSeconds: int64Ptr(30),
-			FieldSelector:  fields.OneTermEqualSelector("metadata.name", "etcdclusters.etcd.database.coreos.com").String(),
-		})
-		if err != nil {
-			glog.Errorf("Error spawning ETCD cluster: %v", err)
-		}
-		defer wi.Stop()
-
-		select {
-		case watchEvent := <-wi.ResultChan():
-			if watch.Added == watchEvent.Type {
-				glog.Info("etcd operator register")
-				wi.Stop()
-			} else {
-				glog.Errorf("expected add, but got %#v", watchEvent)
-			}
-		}
-	} else {
-		glog.Info("etcdclusters.etcd.database.coreos.com exist")
+	if err := waitForETCDCRD(apiExtClient); err != nil {
+		return nil, err
 	}
 
-	if etcdCluster, err := client.EtcdV1beta2().EtcdClusters(ns).Get(name, metav1.GetOptions{}); err == nil {
-		return etcdCluster, nil
-	}
-
-	etcdCl := etcdv1beta2.EtcdCluster{
+	etcdCl := &etcdv1beta2.EtcdCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
+			Name:      name,
+			Namespace: ns,
 			Labels: map[string]string{
 				"captaincy": "kinky",
 			},
@@ -107,6 +87,50 @@ func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensi
 		},
 	}
 
-	client.EtcdV1beta2().EtcdClusters(ns).Create(&etcdCl)
+	if _, err := client.EtcdV1beta2().EtcdClusters(etcdCl.Namespace).Create(etcdCl); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return nil, fmt.Errorf("unable to create etcd cluster: %v", err)
+		}
+
+		cl, err := client.EtcdV1beta2().EtcdClusters(etcdCl.Namespace).Get(etcdCl.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		cl.DeepCopyInto(etcdCl)
+		//etcdCl.ObjectMeta.ResourceVersion = cl.ObjectMeta.ResourceVersion
+
+		if _, err := client.EtcdV1beta2().EtcdClusters(etcdCl.Namespace).Update(etcdCl); err != nil {
+			return cl, fmt.Errorf("unable to update etcd cluster: %v", err)
+		}
+	}
+
+	waitForEtcdAvailable(client, etcdCl)
+
 	return client.EtcdV1beta2().EtcdClusters(ns).Get(name, metav1.GetOptions{})
+}
+
+func waitForETCDCRD(apiExtClient *apiextensionsclientset.Clientset) error {
+	return wait.Poll(5*time.Second, 30*time.Minute, func() (bool, error) {
+		_, err := apiExtClient.ApiextensionsV1beta1().CustomResourceDefinitions().Get(etcdv1beta2.EtcdClusterCRDName, metav1.GetOptions{})
+		if err != nil {
+			if !apierrors.IsAlreadyExists(err) {
+				return false, err
+			}
+			return false, nil
+		}
+		return true, nil
+	})
+}
+
+func waitForEtcdAvailable(client *etcdclientset.Clientset, cluster *etcdv1beta2.EtcdCluster) error {
+	return wait.Poll(5*time.Second, 30*time.Minute, func() (bool, error) {
+		cl, err := client.EtcdV1beta2().EtcdClusters(cluster.Namespace).Get(cluster.Name, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if cl.Status.Phase != etcdv1beta2.ClusterPhaseRunning {
+			return false, nil
+		}
+		return true, nil
+	})
 }

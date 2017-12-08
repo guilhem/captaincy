@@ -13,20 +13,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/clientcmd"
 
-	appsv1beta1 "k8s.io/api/apps/v1beta1"
 	apiv1 "k8s.io/api/core/v1"
+	extv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/client-go/kubernetes"
 
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-
-	captaincyclientset "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
-
 	etcdclientset "github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
+	captaincyclientset "github.com/guilhem/captaincy/pkg/client/clientset/versioned"
+	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
+	nodebootstraptokenphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/bootstraptoken/node"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
 
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 	"k8s.io/kubernetes/pkg/util/version"
 )
 
@@ -85,11 +85,10 @@ func main() {
 			glog.Errorf("Error spawning ETCD cluster: %v", err)
 		}
 
-		glog.Infof("Etcd created")
-
 		apiService := &apiv1.Service{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "kube-apiserver",
+				Name:      "kube-apiserver",
+				Namespace: cluster.Namespace,
 				Labels: map[string]string{
 					"component": "kube-apiserver",
 					"tier":      "control-plane",
@@ -111,9 +110,7 @@ func main() {
 			},
 		}
 
-		if _, err := k8sClient.CoreV1().Services(cluster.Namespace).Create(apiService); err != nil {
-			glog.Errorf("Fail service: %v", err)
-		}
+		k8sClient.CoreV1().Services(apiService.Namespace).Create(apiService)
 
 		// Wait for API service to have an IP
 		if err := wait.Poll(5*time.Second, 30*time.Minute, func() (bool, error) {
@@ -133,15 +130,16 @@ func main() {
 		if err != nil {
 			glog.Errorf("Fail service: %v", err)
 		}
-		apiIP := svc.Spec.ClusterIP
+		internalApiIP := svc.Spec.ClusterIP
+		// TODO better way to fix external IP
+		externalApiIP := "1.2.3.4"
 
 		kubeadmCfg := &kubeadm.MasterConfiguration{
 			Etcd: kubeadm.Etcd{
 				Endpoints: []string{fmt.Sprintf("http://%s:%d", etcdCluster.Status.ServiceName, etcdCluster.Status.ClientPort)},
 			},
 			API: kubeadm.API{
-				AdvertiseAddress: apiIP,
-				BindPort:         443,
+				BindPort: 443,
 			},
 		}
 		if cluster.Spec.Version != "" {
@@ -150,7 +148,13 @@ func main() {
 
 		SetDefaults_MasterConfiguration(kubeadmCfg)
 
-		if err := test(k8sClient, kubeadmCfg, cluster.Namespace, []net.IP{net.ParseIP(apiIP)}); err != nil {
+		internalKubeadmCfg := kubeadmCfg.DeepCopy()
+		internalKubeadmCfg.API.AdvertiseAddress = internalApiIP
+
+		externalKubeadmCfg := kubeadmCfg.DeepCopy()
+		externalKubeadmCfg.API.AdvertiseAddress = externalApiIP
+
+		if err := certsPhase(k8sClient, internalKubeadmCfg, cluster.Namespace, []net.IP{net.ParseIP(internalApiIP), net.ParseIP(externalApiIP)}); err != nil {
 			glog.Errorf("Create certificates and configs fail: %v", err)
 		}
 
@@ -158,7 +162,7 @@ func main() {
 		if err != nil {
 			glog.Errorf("Fail to parse Version")
 		}
-		pods := controlplane.GetStaticPodSpecs(kubeadmCfg, semK8sVersion)
+		pods := controlplane.GetStaticPodSpecs(externalKubeadmCfg, semK8sVersion)
 		for _, pod := range pods {
 			// We don't want to use host network
 			pod.Spec.HostNetwork = false
@@ -181,6 +185,7 @@ func main() {
 						for iVM, volumeMount := range container.VolumeMounts {
 							if volumeMount.Name == kubeadmconstants.KubeConfigVolumeName {
 								pod.Spec.Containers[iC].VolumeMounts[iVM].MountPath = kubeadmconstants.KubernetesDir
+								pod.Spec.Containers[iC].VolumeMounts[iVM].ReadOnly = false
 							}
 						}
 					}
@@ -195,11 +200,12 @@ func main() {
 					},
 				}
 			}
-			deploy := &appsv1beta1.Deployment{
+			deploy := &extv1beta1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: pod.Name,
+					Name:      pod.Name,
+					Namespace: cluster.Namespace,
 				},
-				Spec: appsv1beta1.DeploymentSpec{
+				Spec: extv1beta1.DeploymentSpec{
 					Replicas: int32Ptr(1),
 					Template: apiv1.PodTemplateSpec{
 						ObjectMeta: pod.ObjectMeta,
@@ -207,11 +213,14 @@ func main() {
 					},
 				},
 			}
-			if _, err := k8sClient.AppsV1beta1().Deployments(cluster.Namespace).Create(deploy); err != nil {
-				if _, err := k8sClient.AppsV1beta1().Deployments(cluster.Namespace).Update(deploy); err != nil {
-					glog.Errorf("Pod deployment fail: %v", err)
-				}
+			if err := apiclient.CreateOrUpdateDeployment(k8sClient, deploy); err != nil {
+				glog.Errorf("Pod deployment fail: %v", err)
 			}
+		}
+
+		tokenDescription := "The default bootstrap token generated."
+		if err := nodebootstraptokenphase.UpdateOrCreateToken(k8sClient, kubeadmCfg.Token, false, kubeadmCfg.TokenTTL.Duration, kubeadmconstants.DefaultTokenUsages, []string{kubeadmconstants.V18NodeBootstrapTokenAuthGroup}, tokenDescription); err != nil {
+			glog.Errorf("Creation default bootstrap: %v", err)
 		}
 	}
 }

@@ -7,13 +7,16 @@ import:
   - pkg/generated/clientset/versioned
 - package: github.com/golang/glog
 - package: k8s.io/api
+  version: release-1.8
   subpackages:
   - apps/v1beta1
   - core/v1
 - package: k8s.io/apiextensions-apiserver
+  version: release-1.8
   subpackages:
   - pkg/client/clientset/clientset
 - package: k8s.io/apimachinery
+  version: release-1.8
   subpackages:
   - pkg/api/errors
   - pkg/apis/meta/v1
@@ -45,3 +48,4 @@ import:
   - cmd/kubeadm/app/phases/certs
   - cmd/kubeadm/app/phases/certs/pkiutil
   - cmd/kubeadm/app/phases/controlplane
+  - cmd/kubeadm/app/util/apiclient

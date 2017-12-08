@@ -8,10 +8,10 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/golang/glog"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/certs/pkiutil"
 	kubeconfigutil "k8s.io/kubernetes/cmd/kubeadm/app/util/kubeconfig"
@@ -25,9 +25,45 @@ import (
 	certsphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/certs"
 )
 
-func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, ns string, ips []net.IP) error {
-	caCert, caKey, _ := certsphase.NewCACertAndKey()
-	// fmt.Printf("ca: %v - %v\n", caCert, caKey)
+type certsWallet struct {
+	CaCert                   *x509.Certificate
+	CaKey                    *rsa.PrivateKey
+	ApiCert                  *x509.Certificate
+	ApiKey                   *rsa.PrivateKey
+	ApiClientCert            *x509.Certificate
+	ApiClientKey             *rsa.PrivateKey
+	ServiceAccountPrivateKey *rsa.PrivateKey
+	FrontProxyCACert         *x509.Certificate
+	FrontProxyCAKey          *rsa.PrivateKey
+	FrontProxyClientCert     *x509.Certificate
+	FrontProxyClientKey      *rsa.PrivateKey
+}
+
+func certsPhase(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, ns string, ips []net.IP) error {
+	if !certificatesSecretExists(k8sClient, ns) {
+		wallet, err := createCerts(ips)
+		if err != nil {
+			return err
+		}
+		if err := createCertificatesSecret(k8sClient, ns, wallet); err != nil {
+			return err
+		}
+		if err := createKubeconfigSecret(k8sClient, cfg, ns, wallet); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func createCerts(ips []net.IP) (*certsWallet, error) {
+	wallet := certsWallet{}
+
+	var err error
+
+	wallet.CaCert, wallet.CaKey, err = certsphase.NewCACertAndKey()
+	if err != nil {
+		return nil, err
+	}
 
 	altNames := &certutil.AltNames{
 		DNSNames: []string{
@@ -46,9 +82,9 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 
-	apiCert, apiKey, err := pkiutil.NewCertAndKey(caCert, caKey, config)
+	wallet.ApiCert, wallet.ApiKey, err = pkiutil.NewCertAndKey(wallet.CaCert, wallet.CaKey, config)
 	if err != nil {
-		glog.Fatalf("failure while creating API server key and certificate: %v", err)
+		return nil, err
 	}
 
 	config = certutil.Config{
@@ -56,28 +92,28 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 		Organization: []string{kubeadmconstants.MastersGroup},
 		Usages:       []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	apiClientCert, apiClientKey, err := pkiutil.NewCertAndKey(caCert, caKey, config)
+	wallet.ApiClientCert, wallet.ApiClientKey, err = pkiutil.NewCertAndKey(wallet.CaCert, wallet.CaKey, config)
 	if err != nil {
-		glog.Fatalf("failure while creating API server kubelet client key and certificate: %v", err)
+		return nil, err
 	}
 
-	saSigningKey, err := certutil.NewPrivateKey()
+	wallet.ServiceAccountPrivateKey, err = certutil.NewPrivateKey()
 	if err != nil {
-		glog.Fatalf("failure while creating service account token signing key: %v", err)
+		return nil, err
 	}
 
-	frontProxyCACert, frontProxyCAKey, err := pkiutil.NewCertificateAuthority()
+	wallet.FrontProxyCACert, wallet.FrontProxyCAKey, err = pkiutil.NewCertificateAuthority()
 	if err != nil {
-		glog.Fatalf("failure while generating front-proxy CA certificate and key: %v", err)
+		return nil, err
 	}
 
 	config = certutil.Config{
 		CommonName: kubeadmconstants.FrontProxyClientCertCommonName,
 		Usages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	frontProxyClientCert, frontProxyClientKey, err := pkiutil.NewCertAndKey(frontProxyCACert, frontProxyCAKey, config)
+	wallet.FrontProxyClientCert, wallet.FrontProxyClientKey, err = pkiutil.NewCertAndKey(wallet.FrontProxyCACert, wallet.FrontProxyCAKey, config)
 	if err != nil {
-		glog.Fatalf("failure while creating front-proxy client key and certificate: %v", err)
+		return nil, err
 	}
 	// fmt.Printf("\nfrontProxyClientCert: %v, %v\n", frontProxyClientCert, frontProxyClientKey)
 	// // PHASE 1: Generate certificates
@@ -90,9 +126,22 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 	// 	return err
 	// }
 
-	pub, err := certutil.EncodePublicKeyPEM(&saSigningKey.PublicKey)
+	return &wallet, nil
+}
+
+func certificatesSecretExists(k8sClient *kubernetes.Clientset, ns string) bool {
+	_, err := k8sClient.CoreV1().Secrets(ns).Get(kubeadmconstants.KubeCertificatesVolumeName, metav1.GetOptions{})
 	if err != nil {
-		glog.Fatalf("failure while creating public key: %v", err)
+		return false
+	}
+	return true
+}
+
+func createCertificatesSecret(k8sClient *kubernetes.Clientset, ns string, wallet *certsWallet) error {
+
+	serviceAccountPublicKey, err := certutil.EncodePublicKeyPEM(&wallet.ServiceAccountPrivateKey.PublicKey)
+	if err != nil {
+		return err
 	}
 
 	secret := &v1.Secret{
@@ -101,28 +150,38 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 			Name:      kubeadmconstants.KubeCertificatesVolumeName,
 		},
 		Data: map[string][]byte{
-			kubeadmconstants.CACertName:                     certutil.EncodeCertPEM(caCert),
-			kubeadmconstants.CAKeyName:                      certutil.EncodePrivateKeyPEM(caKey),
-			kubeadmconstants.APIServerCertName:              certutil.EncodeCertPEM(apiCert),
-			kubeadmconstants.APIServerKeyName:               certutil.EncodePrivateKeyPEM(apiKey),
-			kubeadmconstants.APIServerKubeletClientCertName: certutil.EncodeCertPEM(apiClientCert),
-			kubeadmconstants.APIServerKubeletClientKeyName:  certutil.EncodePrivateKeyPEM(apiClientKey),
-			kubeadmconstants.ServiceAccountPublicKeyName:    pub,
-			kubeadmconstants.ServiceAccountPrivateKeyName:   certutil.EncodePrivateKeyPEM(saSigningKey),
-			kubeadmconstants.FrontProxyCAKeyName:            certutil.EncodePrivateKeyPEM(frontProxyCAKey),
-			kubeadmconstants.FrontProxyCACertName:           certutil.EncodeCertPEM(frontProxyCACert),
-			kubeadmconstants.FrontProxyClientKeyName:        certutil.EncodePrivateKeyPEM(frontProxyClientKey),
-			kubeadmconstants.FrontProxyClientCertName:       certutil.EncodeCertPEM(frontProxyClientCert),
+			kubeadmconstants.CACertName:                     certutil.EncodeCertPEM(wallet.CaCert),
+			kubeadmconstants.CAKeyName:                      certutil.EncodePrivateKeyPEM(wallet.CaKey),
+			kubeadmconstants.APIServerCertName:              certutil.EncodeCertPEM(wallet.ApiCert),
+			kubeadmconstants.APIServerKeyName:               certutil.EncodePrivateKeyPEM(wallet.ApiKey),
+			kubeadmconstants.APIServerKubeletClientCertName: certutil.EncodeCertPEM(wallet.ApiClientCert),
+			kubeadmconstants.APIServerKubeletClientKeyName:  certutil.EncodePrivateKeyPEM(wallet.ApiClientKey),
+			kubeadmconstants.ServiceAccountPublicKeyName:    serviceAccountPublicKey,
+			kubeadmconstants.ServiceAccountPrivateKeyName:   certutil.EncodePrivateKeyPEM(wallet.ServiceAccountPrivateKey),
+			kubeadmconstants.FrontProxyCAKeyName:            certutil.EncodePrivateKeyPEM(wallet.FrontProxyCAKey),
+			kubeadmconstants.FrontProxyCACertName:           certutil.EncodeCertPEM(wallet.FrontProxyCACert),
+			kubeadmconstants.FrontProxyClientKeyName:        certutil.EncodePrivateKeyPEM(wallet.FrontProxyClientKey),
+			kubeadmconstants.FrontProxyClientCertName:       certutil.EncodeCertPEM(wallet.FrontProxyClientCert),
 		},
 	}
 
-	if _, err := k8sClient.CoreV1().Secrets(ns).Create(secret); err != nil {
-		if _, err := k8sClient.CoreV1().Secrets(ns).Update(secret); err != nil {
-			return err
-		}
+	if err := apiclient.CreateOrUpdateSecret(k8sClient, secret); err != nil {
+		return err
 	}
+	return nil
+}
 
-	kubeConfigs, err := createKubeConfigFiles(cfg, caCert, caKey)
+func kubeconfigSecretExists(k8sClient *kubernetes.Clientset, ns string) bool {
+	_, err := k8sClient.CoreV1().Secrets(ns).Get(kubeconfigSecret, metav1.GetOptions{})
+	if err != nil {
+		return false
+	}
+	return true
+}
+
+func createKubeconfigSecret(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, ns string, wallet *certsWallet) error {
+
+	kubeConfigs, err := createKubeConfigFiles(cfg, wallet.CaCert, wallet.CaKey)
 	if err != nil {
 		return err
 	}
@@ -136,6 +195,12 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 		return errors.New("No Controller Kubeconfig found")
 	}
 
+	// TODO own secret
+	adminConfig, ok := kubeConfigs[kubeadmconstants.AdminKubeConfigFileName]
+	if !ok {
+		return errors.New("No Admin Kubeconfig found")
+	}
+
 	schedulerFile, err := clientcmd.Write(*schedulerConfig)
 	if err != nil {
 		return err
@@ -144,8 +209,12 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 	if err != nil {
 		return err
 	}
+	adminFile, err := clientcmd.Write(*adminConfig)
+	if err != nil {
+		return err
+	}
 
-	secret = &v1.Secret{
+	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: ns,
 			Name:      kubeconfigSecret,
@@ -153,12 +222,12 @@ func test(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, 
 		Data: map[string][]byte{
 			kubeadmconstants.SchedulerKubeConfigFileName:         schedulerFile,
 			kubeadmconstants.ControllerManagerKubeConfigFileName: controllerFile,
+			kubeadmconstants.AdminKubeConfigFileName:             adminFile,
 		},
 	}
-	if _, err := k8sClient.CoreV1().Secrets(ns).Create(secret); err != nil {
-		if _, err := k8sClient.CoreV1().Secrets(ns).Update(secret); err != nil {
-			return err
-		}
+
+	if err := apiclient.CreateOrUpdateSecret(k8sClient, secret); err != nil {
+		return err
 	}
 
 	return nil
