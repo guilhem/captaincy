@@ -94,6 +94,7 @@ func createCluster(k8sClient *kubernetes.Clientset, etcdClient *etcdclientset.Cl
 		Etcd: kubeadm.Etcd{
 			Endpoints: []string{fmt.Sprintf("http://%s:%d", etcdCluster.Status.ServiceName, etcdCluster.Status.ClientPort)},
 		},
+		CertificatesDir: "/pki",
 		API: kubeadm.API{
 			BindPort:         443,
 			AdvertiseAddress: "0.0.0.0",
