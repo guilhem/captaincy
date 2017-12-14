@@ -97,8 +97,11 @@ func createCluster(k8sClient *kubernetes.Clientset, etcdClient *etcdclientset.Cl
 			Endpoints: []string{fmt.Sprintf("http://%s:%d", etcdCluster.Status.ServiceName, etcdCluster.Status.ClientPort)},
 		},
 		API: kubeadm.API{
-			BindPort: 443,
+			BindPort:         443,
+			AdvertiseAddress: "0.0.0.0",
 		},
+		ControllerManagerExtraArgs: map[string]string{"address": "0.0.0.0"},
+		SchedulerExtraArgs:         map[string]string{"address": "0.0.0.0"},
 	}
 	if cluster.Spec.Version != "" {
 		kubeadmCfg.KubernetesVersion = cluster.Spec.Version
