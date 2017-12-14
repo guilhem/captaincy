@@ -78,7 +78,7 @@ func GetPodNames(pods []*v1.Pod) []string {
 	return res
 }
 
-func makeRestoreInitContainers(backupURL *url.URL, token, baseImage, version string, m *etcdutil.Member) []v1.Container {
+func makeRestoreInitContainers(backupURL *url.URL, token, repo, version string, m *etcdutil.Member) []v1.Container {
 	return []v1.Container{
 		{
 			Name:  "fetch-backup",
@@ -91,7 +91,7 @@ func makeRestoreInitContainers(backupURL *url.URL, token, baseImage, version str
 		},
 		{
 			Name:  "restore-datadir",
-			Image: ImageName(baseImage, version),
+			Image: ImageName(repo, version),
 			Command: []string{
 				"/bin/sh", "-ec",
 				fmt.Sprintf("ETCDCTL_API=3 etcdctl snapshot restore %[1]s"+
@@ -106,8 +106,8 @@ func makeRestoreInitContainers(backupURL *url.URL, token, baseImage, version str
 	}
 }
 
-func ImageName(baseImage, version string) string {
-	return fmt.Sprintf("%s:v%v", baseImage, version)
+func ImageName(repo, version string) string {
+	return fmt.Sprintf("%s:v%v", repo, version)
 }
 
 func PodWithNodeSelector(p *v1.Pod, ns map[string]string) *v1.Pod {
@@ -210,7 +210,7 @@ func newEtcdServiceManifest(svcName, clusterName, clusterIP string, ports []v1.S
 }
 
 func addRecoveryToPod(pod *v1.Pod, token string, m *etcdutil.Member, cs api.ClusterSpec, backupURL *url.URL) {
-	pod.Spec.InitContainers = makeRestoreInitContainers(backupURL, token, cs.BaseImage, cs.Version, m)
+	pod.Spec.InitContainers = makeRestoreInitContainers(backupURL, token, cs.Repository, cs.Version, m)
 }
 
 func addOwnerRefToObject(o metav1.Object, r metav1.OwnerReference) {
@@ -249,11 +249,9 @@ func NewEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 		"etcd_cluster": clusterName,
 	}
 
-	if strings.HasPrefix(cs.Version, "3.0.") {
-		// DNS entries might not warm up initially. 3.0.x etcd will exit without retrying.
-		commands = fmt.Sprintf("sleep 5; %s", commands)
-	}
-	container := containerWithLivenessProbe(etcdContainer(commands, cs.BaseImage, cs.Version), etcdLivenessProbe(cs.TLS.IsSecureClient()))
+	container := containerWithLivenessProbe(
+		etcdContainer(strings.Split(commands, " "), cs.Repository, cs.Version),
+		etcdLivenessProbe(cs.TLS.IsSecureClient()))
 
 	if cs.Pod != nil {
 		container = containerWithRequirements(container, cs.Pod.Resources)
@@ -294,14 +292,26 @@ func NewEtcdPod(m *etcdutil.Member, initialCluster []string, clusterName, state,
 			Annotations: map[string]string{},
 		},
 		Spec: v1.PodSpec{
+			InitContainers: []v1.Container{{
+				Image: "busybox",
+				Name:  "check-dns",
+				// In etcd 3.2, TLS listener will do a reverse-DNS lookup for pod IP -> hostname.
+				// If DNS entry is not warmed up, it will return empty result and peer connection will be rejected.
+				Command: []string{"/bin/sh", "-c", fmt.Sprintf(`
+					while ( ! nslookup %s )
+					do
+						sleep 2
+					done`, m.Addr())},
+			}},
 			Containers:    []v1.Container{container},
 			RestartPolicy: v1.RestartPolicyNever,
 			Volumes:       volumes,
 			// DNS A record: `[m.Name].[clusterName].Namespace.svc`
 			// For example, etcd-0000 in default namesapce will have DNS name
 			// `etcd-0000.etcd.default.svc`.
-			Hostname:  m.Name,
-			Subdomain: clusterName,
+			Hostname:                     m.Name,
+			Subdomain:                    clusterName,
+			AutomountServiceAccountToken: func(b bool) *bool { return &b }(false),
 		},
 	}
 

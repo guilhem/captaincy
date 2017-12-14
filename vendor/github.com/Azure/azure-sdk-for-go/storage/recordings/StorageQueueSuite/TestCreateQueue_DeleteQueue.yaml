@@ -7,13 +7,12 @@ interactions:
     form: {}
     headers:
       Authorization:
-      - SharedKey golangrocksonazure:LmqdjlmtmJxNNkfm+K/Zsx8eeraNq1wBRMKc5NSOfXE=
+      - SharedKey golangrocksonazure:D4YZwQMwu7TfF7r1N1+LUgAD7N+OhwSW/BE8o3lWzVU=
       User-Agent:
-      - Go/go1.9beta1 (amd64-windows) azure-storage-go/10.0.2 api-version/2016-05-31
-        queue
-      x-ms-date:
-      - Thu, 20 Jul 2017 23:34:08 GMT
-      x-ms-version:
+      - Go/go1.8 (amd64-windows) azure-storage-go/0.1.0 api-version/2016-05-31 queue
+      X-Ms-Date:
+      - Wed, 05 Apr 2017 22:33:31 GMT
+      X-Ms-Version:
       - 2016-05-31
     url: https://golangrocksonazure.queue.core.windows.net/queue-45storagequeuesuitetestcreatequeuedeletequeue
     method: PUT
@@ -21,11 +20,11 @@ interactions:
     body: ""
     headers:
       Date:
-      - Thu, 20 Jul 2017 23:34:08 GMT
+      - Wed, 05 Apr 2017 22:33:31 GMT
       Server:
       - Windows-Azure-Queue/1.0 Microsoft-HTTPAPI/2.0
       X-Ms-Request-Id:
-      - 3fb9b21b-0003-00da-44b0-011674000000
+      - 564c770b-0003-006f-245c-aeaa6d000000
       X-Ms-Version:
       - 2016-05-31
     status: 201 Created
@@ -35,13 +34,12 @@ interactions:
     form: {}
     headers:
       Authorization:
-      - SharedKey golangrocksonazure:anhJBkMKfpfX0nhPVo08mbBWI7rKvzeWB+JUMW5ocoE=
+      - SharedKey golangrocksonazure:gAGWjSBnkYm7E/rNvaHRIBexGeYk+Ea1uzSnklzhQj8=
       User-Agent:
-      - Go/go1.9beta1 (amd64-windows) azure-storage-go/10.0.2 api-version/2016-05-31
-        queue
-      x-ms-date:
-      - Thu, 20 Jul 2017 23:34:09 GMT
-      x-ms-version:
+      - Go/go1.8 (amd64-windows) azure-storage-go/0.1.0 api-version/2016-05-31 queue
+      X-Ms-Date:
+      - Wed, 05 Apr 2017 22:33:31 GMT
+      X-Ms-Version:
       - 2016-05-31
     url: https://golangrocksonazure.queue.core.windows.net/queue-45storagequeuesuitetestcreatequeuedeletequeue
     method: DELETE
@@ -51,11 +49,11 @@ interactions:
       Content-Length:
       - "0"
       Date:
-      - Thu, 20 Jul 2017 23:34:08 GMT
+      - Wed, 05 Apr 2017 22:33:31 GMT
       Server:
       - Windows-Azure-Queue/1.0 Microsoft-HTTPAPI/2.0
       X-Ms-Request-Id:
-      - 3fb9b21d-0003-00da-45b0-011674000000
+      - 564c771a-0003-006f-305c-aeaa6d000000
       X-Ms-Version:
       - 2016-05-31
     status: 204 No Content

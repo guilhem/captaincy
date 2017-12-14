@@ -214,7 +214,6 @@
       },
       "output":{"shape":"CreateVPCAssociationAuthorizationResponse"},
       "errors":[
-        {"shape":"ConcurrentModification"},
         {"shape":"TooManyVPCAssociationAuthorizations"},
         {"shape":"NoSuchHostedZone"},
         {"shape":"InvalidVPCId"},
@@ -308,7 +307,6 @@
       },
       "output":{"shape":"DeleteVPCAssociationAuthorizationResponse"},
       "errors":[
-        {"shape":"ConcurrentModification"},
         {"shape":"VPCAssociationAuthorizationNotFound"},
         {"shape":"NoSuchHostedZone"},
         {"shape":"InvalidVPCId"},
@@ -973,10 +971,8 @@
         "us-east-2",
         "us-west-1",
         "us-west-2",
-        "ca-central-1",
         "eu-central-1",
         "eu-west-1",
-        "eu-west-2",
         "ap-south-1",
         "ap-southeast-1",
         "ap-southeast-2",
@@ -1848,7 +1844,7 @@
         "locationName":"Region"
       },
       "max":64,
-      "min":3
+      "min":1
     },
     "HealthCheckType":{
       "type":"string",
@@ -1972,8 +1968,7 @@
     "InvalidChangeBatch":{
       "type":"structure",
       "members":{
-        "messages":{"shape":"ErrorMessages"},
-        "message":{"shape":"ErrorMessage"}
+        "messages":{"shape":"ErrorMessages"}
       },
       "exception":true
     },
@@ -2735,7 +2730,6 @@
         "Region":{"shape":"ResourceRecordSetRegion"},
         "GeoLocation":{"shape":"GeoLocation"},
         "Failover":{"shape":"ResourceRecordSetFailover"},
-        "MultiValueAnswer":{"shape":"ResourceRecordSetMultiValueAnswer"},
         "TTL":{"shape":"TTL"},
         "ResourceRecords":{"shape":"ResourceRecords"},
         "AliasTarget":{"shape":"AliasTarget"},
@@ -2755,7 +2749,6 @@
       "max":128,
       "min":1
     },
-    "ResourceRecordSetMultiValueAnswer":{"type":"boolean"},
     "ResourceRecordSetRegion":{
       "type":"string",
       "enum":[
@@ -2841,7 +2834,7 @@
     },
     "SubnetMask":{
       "type":"string",
-      "max":3,
+      "max":2,
       "min":0
     },
     "TTL":{

@@ -12,6 +12,47 @@
 
 ### Security
 
+## [Release 0.7.2]
+
+> Note: This is a bug fix release.
+
+When we bump the etcd version to 3.2, the images were only available on gcr.io . But now it is added on quay.io .
+We'd better use quay.io and keep it compatible to work for 3.1 versions of etcd.
+
+## [Release 0.7.1]
+
+### Added
+
+- TLS etcd cluster feature for EtcdBackup
+- Log collector program for collecting logs in e2e test.
+- ClusterSpec: In PodPolicy, add generic `Affinity` field to substitute bool `AntiAffinity` field.
+- ClusterSpec: Add `Repository` field to substitute `BaseImage` field.
+
+### Changed
+
+- Default base image is changed to `gcr.io/etcd-development/etcd`, default etcd version is `3.2.11`.
+- Migrate dependency management tooling from glide to dep.
+- Containerize e2e test in a pod instead of running on raw jenkin slave.
+
+### Removed
+
+- ClusterSpec: Remove `PodPolicy.AutomountServiceAccountToken` field.
+  No etcd pod will have service account token mounted.
+
+### Fixed
+
+- Ignore Terminating pods when polling etcd pods.
+
+### Deprecated
+
+- ClusterSpec: `BaseImage` is deprecated. It will be automatically converted to `Repository` in this release.
+- ClusterSpec: In PodPolicy, `AntiAffinity` is deprecated. It will be automatically converted to `Affinity.PodAntiAffinity`
+  terms with label selector on given cluster name and topology key on node in this release.
+
+### Security
+
+- All operator images by default uses user `etcd-operator` instead of root.
+
 
 ## [Release 0.7.0]
 

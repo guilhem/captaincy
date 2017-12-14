@@ -56,7 +56,7 @@ type Framework struct {
 }
 
 // Setup setups a test framework and points "Global" to it.
-func Setup() error {
+func setup() error {
 	kubeconfig := flag.String("kubeconfig", "", "kube config path, e.g. $HOME/.kube/config")
 	opImage := flag.String("operator-image", "", "operator image, e.g. gcr.io/coreos-k8s-scale-testing/etcd-operator")
 	ns := flag.String("namespace", "default", "e2e test namespace")
@@ -80,40 +80,28 @@ func Setup() error {
 	return Global.setup()
 }
 
-func Teardown() error {
-	if err := Global.deleteEtcdOperator(); err != nil {
+func teardown() error {
+	err := Global.deleteOperatorCompletely("etcd-operator")
+	if err != nil {
 		return err
-	}
-	err := Global.KubeClient.CoreV1().Pods(Global.Namespace).Delete(etcdBackupOperatorName, metav1.NewDeleteOptions(1))
-	if err != nil {
-		return fmt.Errorf("failed to delete etcd backup operator: %v", err)
-	}
-	err = Global.KubeClient.CoreV1().Pods(Global.Namespace).Delete(etcdRestoreOperatorName, metav1.NewDeleteOptions(1))
-	if err != nil {
-		return fmt.Errorf("failed to delete etcd restore operator pod: %v", err)
 	}
 	err = Global.KubeClient.CoreV1().Services(Global.Namespace).Delete(etcdRestoreOperatorServiceName, metav1.NewDeleteOptions(1))
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("failed to delete etcd restore operator service: %v", err)
 	}
-	// TODO: check all deleted and wait
 	Global = nil
 	logrus.Info("e2e teardown successfully")
 	return nil
 }
 
 func (f *Framework) setup() error {
-	if err := f.SetupEtcdOperator(); err != nil {
+	err := f.SetupEtcdOperator()
+	if err != nil {
 		return fmt.Errorf("failed to setup etcd operator: %v", err)
 	}
 	logrus.Info("etcd operator created successfully")
-	err := f.SetupEtcdBackupOperator()
-	if err != nil {
-		return fmt.Errorf("failed to create etcd backup operator: %v", err)
-	}
-	logrus.Info("etcd backup operator created successfully")
 
-	err = f.SetupEtcdRestoreOperatorAndService()
+	err = f.SetupEtcdRestoreOperatorService()
 	if err != nil {
 		return err
 	}
@@ -124,43 +112,73 @@ func (f *Framework) setup() error {
 }
 
 func (f *Framework) SetupEtcdOperator() error {
-	// TODO: unify this and the yaml file in example/
-	cmd := []string{"/usr/local/bin/etcd-operator"}
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "etcd-operator",
 			Labels: map[string]string{"name": "etcd-operator"},
 		},
 		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:            "etcd-operator",
-					Image:           f.opImage,
-					ImagePullPolicy: v1.PullAlways,
-					Command:         cmd,
-					Env: []v1.EnvVar{
-						{
-							Name:      constants.EnvOperatorPodNamespace,
-							ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
-						},
-						{
-							Name:      constants.EnvOperatorPodName,
-							ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
-						},
+			Containers: []v1.Container{{
+				Name:            "etcd-operator",
+				Image:           f.opImage,
+				ImagePullPolicy: v1.PullAlways,
+				Command:         []string{"/usr/local/bin/etcd-operator"},
+				Env: []v1.EnvVar{
+					{
+						Name:      constants.EnvOperatorPodNamespace,
+						ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
 					},
-					ReadinessProbe: &v1.Probe{
-						Handler: v1.Handler{
-							HTTPGet: &v1.HTTPGetAction{
-								Path: probe.HTTPReadyzEndpoint,
-								Port: intstr.IntOrString{Type: intstr.Int, IntVal: 8080},
-							},
-						},
-						InitialDelaySeconds: 3,
-						PeriodSeconds:       3,
-						FailureThreshold:    3,
+					{
+						Name:      constants.EnvOperatorPodName,
+						ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
 					},
 				},
-			},
+				ReadinessProbe: &v1.Probe{
+					Handler: v1.Handler{
+						HTTPGet: &v1.HTTPGetAction{
+							Path: probe.HTTPReadyzEndpoint,
+							Port: intstr.IntOrString{Type: intstr.Int, IntVal: 8080},
+						},
+					},
+					InitialDelaySeconds: 3,
+					PeriodSeconds:       3,
+					FailureThreshold:    3,
+				},
+			}, {
+				Name:            etcdBackupOperatorName,
+				Image:           f.opImage,
+				ImagePullPolicy: v1.PullAlways,
+				Command:         []string{"/usr/local/bin/etcd-backup-operator"},
+				Env: []v1.EnvVar{
+					{
+						Name:      constants.EnvOperatorPodNamespace,
+						ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
+					},
+					{
+						Name:      constants.EnvOperatorPodName,
+						ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
+					},
+				},
+			}, {
+				Name:            etcdRestoreOperatorName,
+				Image:           f.opImage,
+				ImagePullPolicy: v1.PullAlways,
+				Command:         []string{"/usr/local/bin/etcd-restore-operator"},
+				Env: []v1.EnvVar{
+					{
+						Name:      constants.EnvOperatorPodNamespace,
+						ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
+					},
+					{
+						Name:      constants.EnvOperatorPodName,
+						ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
+					},
+					{
+						Name:  constants.EnvRestoreOperatorServiceName,
+						Value: etcdRestoreOperatorServiceName + ":" + strconv.Itoa(etcdRestoreServicePort),
+					},
+				},
+			}},
 			RestartPolicy: v1.RestartPolicyNever,
 		},
 	}
@@ -185,14 +203,18 @@ func describePod(ns, name string) {
 }
 
 func (f *Framework) DeleteEtcdOperatorCompletely() error {
-	err := f.deleteEtcdOperator()
+	return f.deleteOperatorCompletely("etcd-operator")
+}
+
+func (f *Framework) deleteOperatorCompletely(name string) error {
+	err := f.KubeClient.CoreV1().Pods(f.Namespace).Delete(name, metav1.NewDeleteOptions(1))
 	if err != nil {
 		return err
 	}
-	// On k8s 1.6.1, grace period isn't accurate. It took ~10s for operator pod to completely disappear.
+	// Grace period isn't exactly accurate. It took ~10s for operator pod to completely disappear.
 	// We work around by increasing the wait time. Revisit this later.
 	err = retryutil.Retry(5*time.Second, 6, func() (bool, error) {
-		_, err := f.KubeClient.CoreV1().Pods(f.Namespace).Get("etcd-operator", metav1.GetOptions{})
+		_, err := f.KubeClient.CoreV1().Pods(f.Namespace).Get(name, metav1.GetOptions{})
 		if err == nil {
 			return false, nil
 		}
@@ -202,113 +224,28 @@ func (f *Framework) DeleteEtcdOperatorCompletely() error {
 		return false, err
 	})
 	if err != nil {
-		return fmt.Errorf("fail to wait etcd operator pod gone from API: %v", err)
+		return fmt.Errorf("fail to wait operator (%s) pod gone from API: %v", name, err)
 	}
 	return nil
 }
 
-// SetupEtcdBackupOperator creates a etcd backup operator pod with name as "etcd-backup-operator".
-func (f *Framework) SetupEtcdBackupOperator() error {
-	cmd := []string{"/usr/local/bin/etcd-backup-operator"}
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   etcdBackupOperatorName,
-			Labels: map[string]string{"name": etcdBackupOperatorName},
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:            etcdBackupOperatorName,
-					Image:           f.opImage,
-					ImagePullPolicy: v1.PullAlways,
-					Command:         cmd,
-					Env: []v1.EnvVar{
-						{
-							Name:      constants.EnvOperatorPodNamespace,
-							ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
-						},
-						{
-							Name:      constants.EnvOperatorPodName,
-							ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
-						},
-					},
-				},
-			},
-			RestartPolicy: v1.RestartPolicyNever,
-		},
-	}
-
-	p, err := k8sutil.CreateAndWaitPod(f.KubeClient, f.Namespace, pod, 60*time.Second)
-	if err != nil {
-		describePod(f.Namespace, etcdBackupOperatorName)
-		return err
-	}
-	logrus.Infof("etcd backup operator pod is running on node (%s)", p.Spec.NodeName)
-	return nil
-}
-
-// SetupEtcdRestoreOperatorAndService creates an etcd restore operator pod and the restore operator service.
-func (f *Framework) SetupEtcdRestoreOperatorAndService() error {
-	cmd := []string{"/usr/local/bin/etcd-restore-operator"}
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   etcdRestoreOperatorName,
-			Labels: map[string]string{"name": etcdRestoreOperatorName},
-		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
-				{
-					Name:            etcdRestoreOperatorName,
-					Image:           f.opImage,
-					ImagePullPolicy: v1.PullAlways,
-					Command:         cmd,
-					Env: []v1.EnvVar{
-						{
-							Name:      constants.EnvOperatorPodNamespace,
-							ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"}},
-						},
-						{
-							Name:      constants.EnvOperatorPodName,
-							ValueFrom: &v1.EnvVarSource{FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.name"}},
-						},
-						{
-							Name:  constants.EnvRestoreOperatorServiceName,
-							Value: etcdRestoreOperatorServiceName + ":" + strconv.Itoa(etcdRestoreServicePort),
-						},
-					},
-				},
-			},
-			RestartPolicy: v1.RestartPolicyNever,
-		},
-	}
-
-	p, err := k8sutil.CreateAndWaitPod(f.KubeClient, f.Namespace, pod, 60*time.Second)
-	if err != nil {
-		describePod(f.Namespace, etcdRestoreOperatorName)
-		return fmt.Errorf("create restore-operator pod failed: %v", err)
-	}
-	logrus.Infof("restore-operator pod is running on node (%s)", p.Spec.NodeName)
-
+// SetupEtcdRestoreOperatorService creates restore operator service that is used by etcd pod to retrieve backup.
+func (f *Framework) SetupEtcdRestoreOperatorService() error {
 	svc := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   etcdRestoreOperatorServiceName,
-			Labels: map[string]string{"name": etcdRestoreOperatorServiceName},
+			Name: etcdRestoreOperatorServiceName,
 		},
 		Spec: v1.ServiceSpec{
-			Selector: map[string]string{"name": etcdRestoreOperatorName},
+			Selector: map[string]string{"name": "etcd-operator"},
 			Ports: []v1.ServicePort{{
 				Protocol: v1.ProtocolTCP,
 				Port:     etcdRestoreServicePort,
 			}},
 		},
 	}
-	_, err = f.KubeClient.CoreV1().Services(f.Namespace).Create(svc)
+	_, err := f.KubeClient.CoreV1().Services(f.Namespace).Create(svc)
 	if err != nil {
 		return fmt.Errorf("create restore-operator service failed: %v", err)
 	}
 	return nil
-}
-
-func (f *Framework) deleteEtcdOperator() error {
-	return f.KubeClient.CoreV1().Pods(f.Namespace).Delete("etcd-operator", metav1.NewDeleteOptions(1))
 }

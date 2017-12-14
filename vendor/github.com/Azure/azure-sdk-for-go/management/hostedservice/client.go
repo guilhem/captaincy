@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package hostedservice provides a client for Hosted Services.
 package hostedservice
 

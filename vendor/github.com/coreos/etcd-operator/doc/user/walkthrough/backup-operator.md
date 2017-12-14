@@ -10,6 +10,7 @@ Try out etcd backup operator by running it on Kubernetes and then create a `Etcd
 >Note: The demo uses the `default` namespace.
 
 Prerequisites: 
+* Setup RBAC and deploy an etcd operator. See [Install Guide][install_guide]
 * A running etcd cluster named `example-etcd-cluster`. See [instructions][etcd_cluster_deploy] to deploy it.
 
 ### Deploy etcd backup operator
@@ -22,6 +23,14 @@ $ kubectl create -f example/etcd-backup-operator/deployment.yaml
 $ kubectl get pod
 NAME                                    READY     STATUS    RESTARTS   AGE
 etcd-backup-operator-1102130733-hhgt7   1/1       Running   0          3s
+```
+
+Verify that the etcd-backup-operator creates EtcdBackup CRD:
+
+```sh
+$ kubectl get crd
+NAME                                    KIND
+etcdbackups.etcd.database.coreos.com    CustomResourceDefinition.v1beta1.apiextensions.k8s.io
 ```
 
 ### Setup AWS Secret
@@ -70,7 +79,7 @@ apiVersion: etcd.database.coreos.com/v1beta2
 kind: EtcdBackup
 ...
 status:
-  s3Path: mybucket/v1/default/example-etcd-cluster/3.1.8_0000000000000001_etcd.backup
+  s3Path: mybucket/v1/default/example-etcd-cluster/3.2.11_0000000000000001_etcd.backup
   succeeded: true
 ```
 
@@ -92,3 +101,4 @@ kubectl delete -f example/etcd-backup-operator/deployment.yaml
 [s3]:https://aws.amazon.com/s3/
 [etcd_cluster_deploy]:https://github.com/coreos/etcd-operator#create-and-destroy-an-etcd-cluster
 [minikube]:https://github.com/kubernetes/minikube
+[install_guide]:../install_guide.md

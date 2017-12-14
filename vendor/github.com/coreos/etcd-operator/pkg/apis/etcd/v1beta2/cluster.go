@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	defaultBaseImage = "quay.io/coreos/etcd"
-	defaultVersion   = "3.1.8"
+	defaultRepository = "quay.io/coreos/etcd"
+	defaultVersion    = "3.2.11"
 )
 
 var (
@@ -70,21 +70,26 @@ type ClusterSpec struct {
 	// cluster equal to the expected size.
 	// The vaild range of the size is from 1 to 7.
 	Size int `json:"size"`
-
-	// BaseImage is the base etcd image name that will be used to launch
-	// etcd clusters. This is useful for private registries, etc.
+	// Repository is the name of the repository that hosts
+	// etcd container images. It should be direct clone of the repository in official
+	// release:
+	//   https://github.com/coreos/etcd/releases
+	// That means, it should have exact same tags and the same meaning for the tags.
 	//
-	// If image is not set, default is quay.io/coreos/etcd
-	BaseImage string `json:"baseImage"`
+	// By default, it is `quay.io/coreos/etcd`.
+	Repository string `json:"repository,omitempty"`
+	// **DEPRECATED**. Use Repository instead.
+	// TODO: remove this field in v0.7.2 .
+	BaseImage string `json:"baseImage,omitempty"`
 
 	// Version is the expected version of the etcd cluster.
 	// The etcd-operator will eventually make the etcd cluster version
 	// equal to the expected version.
 	//
-	// The version must follow the [semver]( http://semver.org) format, for example "3.1.8".
+	// The version must follow the [semver]( http://semver.org) format, for example "3.2.11".
 	// Only etcd released versions are supported: https://github.com/coreos/etcd/releases
 	//
-	// If version is not set, default is "3.1.8".
+	// If version is not set, default is "3.2.11".
 	Version string `json:"version,omitempty"`
 
 	// Paused is to pause the control of the operator for the etcd cluster.
@@ -118,8 +123,9 @@ type PodPolicy struct {
 	// labels.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
-	// AntiAffinity determines if the etcd-operator tries to avoid putting
-	// the etcd members in the same cluster onto the same node.
+	// The scheduling constraints on etcd pods.
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+	// **DEPRECATED**. Use Affinity instead.
 	AntiAffinity bool `json:"antiAffinity,omitempty"`
 
 	// Resources is the resource requirements for the etcd container.
@@ -135,10 +141,6 @@ type PodPolicy struct {
 	// bootstrap the cluster (for example `--initial-cluster` flag).
 	// This field cannot be updated.
 	EtcdEnv []v1.EnvVar `json:"etcdEnv,omitempty"`
-
-	// By default, kubernetes will mount a service account token into the etcd pods.
-	// AutomountServiceAccountToken indicates whether pods running with the service account should have an API token automatically mounted.
-	AutomountServiceAccountToken *bool `json:"automountServiceAccountToken,omitempty"`
 }
 
 func (c *ClusterSpec) Validate() error {
@@ -158,11 +160,16 @@ func (c *ClusterSpec) Validate() error {
 	return nil
 }
 
-// Cleanup cleans up user passed spec, e.g. defaulting, transforming fields.
+// SetDefaults cleans up user passed spec, e.g. defaulting, transforming fields.
 // TODO: move this to admission controller
-func (c *ClusterSpec) Cleanup() {
-	if len(c.BaseImage) == 0 {
-		c.BaseImage = defaultBaseImage
+func (e *EtcdCluster) SetDefaults() {
+	c := &e.Spec
+	if len(c.Repository) == 0 {
+		if len(c.BaseImage) != 0 {
+			c.Repository = c.BaseImage
+		} else {
+			c.Repository = defaultRepository
+		}
 	}
 
 	if len(c.Version) == 0 {
@@ -170,4 +177,22 @@ func (c *ClusterSpec) Cleanup() {
 	}
 
 	c.Version = strings.TrimLeft(c.Version, "v")
+
+	// convert PodPolicy.AntiAffinity to Pod.Affinity.PodAntiAffinity
+	// TODO: Remove this once PodPolicy.AntiAffinity is removed
+	if c.Pod != nil && c.Pod.AntiAffinity && c.Pod.Affinity == nil {
+		c.Pod.Affinity = &v1.Affinity{
+			PodAntiAffinity: &v1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+					{
+						// set anti-affinity to the etcd pods that belongs to the same cluster
+						LabelSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
+							"etcd_cluster": e.Name,
+						}},
+						TopologyKey: "kubernetes.io/hostname",
+					},
+				},
+			},
+		}
+	}
 }

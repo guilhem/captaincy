@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package osimage provides a client for Operating System Images.
 package osimage
 

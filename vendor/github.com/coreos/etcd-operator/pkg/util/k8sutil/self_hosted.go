@@ -81,7 +81,7 @@ done
 	commands = fmt.Sprintf(ft, m.Addr(), commands)
 	commands = fmt.Sprintf("%s; %s", appendHostsCommands(), commands)
 	commands = fmt.Sprintf("flock %s -c \"%s\"", etcdLockPath, commands)
-	c := etcdContainer(commands, cs.BaseImage, cs.Version)
+	c := etcdContainer([]string{"/bin/sh", "-ec", commands}, cs.Repository, cs.Version)
 	// On node reboot, there will be two copies of etcd pod: scheduled and checkpointed one.
 	// Checkpointed one will start first. But then the scheduler will detect host port conflict,
 	// and set the pod (in APIServer) failed. This further affects etcd service by removing the endpoints.
@@ -141,13 +141,14 @@ done
 		Spec: v1.PodSpec{
 			// Self-hosted etcd pod need to endure node restart.
 			// If we set it to Never, the pod won't restart. If etcd won't come up, nor does other k8s API components.
-			RestartPolicy: v1.RestartPolicyAlways,
-			Containers:    []v1.Container{c},
-			Volumes:       volumes,
-			HostNetwork:   true,
-			DNSPolicy:     v1.DNSClusterFirstWithHostNet,
-			Hostname:      m.Name,
-			Subdomain:     clusterName,
+			RestartPolicy:                v1.RestartPolicyAlways,
+			Containers:                   []v1.Container{c},
+			Volumes:                      volumes,
+			HostNetwork:                  true,
+			DNSPolicy:                    v1.DNSClusterFirstWithHostNet,
+			Hostname:                     m.Name,
+			Subdomain:                    clusterName,
+			AutomountServiceAccountToken: func(b bool) *bool { return &b }(false),
 		},
 	}
 
@@ -155,7 +156,7 @@ done
 
 	applyPodPolicy(clusterName, pod, cs.Pod)
 	// overwrites the antiAffinity setting for self hosted cluster.
-	pod = selfHostedPodWithAntiAffinity(pod)
+	applyAntiAffinityOnNodes(pod)
 	addOwnerRefToObject(pod.GetObjectMeta(), owner)
 	return pod
 }
@@ -167,10 +168,22 @@ func appendHostsCommands() string {
 	return fmt.Sprintf("([ -f %[1]s ] && (cat %[1]s >> /etc/hosts) || true)", etcdHostsFile)
 }
 
-func selfHostedPodWithAntiAffinity(pod *v1.Pod) *v1.Pod {
+func applyAntiAffinityOnNodes(pod *v1.Pod) {
 	// self hosted pods should sit on different nodes even if they are from different cluster.
 	ls := &metav1.LabelSelector{MatchLabels: map[string]string{
 		"app": "etcd",
 	}}
-	return podWithAntiAffinity(pod, ls)
+
+	if pod.Spec.Affinity == nil {
+		pod.Spec.Affinity = &v1.Affinity{}
+	}
+
+	pod.Spec.Affinity.PodAntiAffinity = &v1.PodAntiAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+			{
+				LabelSelector: ls,
+				TopologyKey:   "kubernetes.io/hostname",
+			},
+		},
+	}
 }

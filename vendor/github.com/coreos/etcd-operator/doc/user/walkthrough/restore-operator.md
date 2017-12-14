@@ -15,6 +15,7 @@ The overall workflow is:
 Note that currently the etcd-restore-operator only supports restoring from backups saved on S3.
 
 **Prerequisite**
+- Setup RBAC and deploy an etcd operator. See [Install Guide][install_guide]
 - Have an etcd backup saved on S3. See the [etcd-backup-operator README][backup-operator-README] as one way to save a backup to S3.
 
 >Note: This demo uses the `default` namespace.
@@ -76,10 +77,10 @@ Create a Kubernetes secret that contains AWS credentials and config. This is use
 
 Create the `EtcdRestore` CR:
 
->Note: This example uses k8s secret "aws" and S3 path "mybucket/v1/default/example-etcd-cluster/3.1.8_0000000000000001_etcd.backup"
+>Note: This example uses k8s secret "aws" and S3 path "mybucket/v1/default/example-etcd-cluster/3.2.11_0000000000000001_etcd.backup"
 
 ```sh
-sed -e 's|<full-s3-path>|mybucket/v1/default/example-etcd-cluster/3.1.8_0000000000000001_etcd.backup|g' \
+sed -e 's|<full-s3-path>|mybucket/v1/default/example-etcd-cluster/3.2.11_0000000000000001_etcd.backup|g' \
     -e 's|<aws-secret>|aws|g' \
     example/etcd-restore-operator/restore_cr.yaml \
     | kubectl create -f -
@@ -130,3 +131,4 @@ kubect delete -f example/etcd-restore-operator/deployment.yaml
 
 
 [backup-operator-README]:./backup-operator.md
+[install_guide]:../install_guide.md

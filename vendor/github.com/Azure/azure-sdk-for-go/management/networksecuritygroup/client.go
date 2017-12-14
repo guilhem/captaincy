@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package networksecuritygroup provides a client for Network Security Groups.
 package networksecuritygroup
 
