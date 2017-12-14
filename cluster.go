@@ -12,8 +12,6 @@ import (
 	kubeadmconstants "k8s.io/kubernetes/cmd/kubeadm/app/constants"
 	nodebootstraptokenphase "k8s.io/kubernetes/cmd/kubeadm/app/phases/bootstraptoken/node"
 
-	extv1beta1 "k8s.io/api/extensions/v1beta1"
-
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -21,7 +19,6 @@ import (
 
 	"github.com/golang/glog"
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
-	"k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
 	masterconfig "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	"k8s.io/kubernetes/pkg/util/version"
@@ -131,62 +128,12 @@ func createCluster(k8sClient *kubernetes.Clientset, etcdClient *etcdclientset.Cl
 		glog.Errorf("Fail to parse Version")
 		return err
 	}
-	pods := controlplane.GetStaticPodSpecs(externalKubeadmCfg, semK8sVersion)
-	for _, pod := range pods {
-		// add exposed secured port to api-server
-		if pod.Name == "kube-apiserver" {
-			pod.Spec.Containers[0].Ports = []apiv1.ContainerPort{
-				{
-					ContainerPort: 443,
-					Name:          "secure",
-				},
-			}
-		}
-		// We don't want to use host network
-		pod.Spec.HostNetwork = false
-		// patch pod names
-		pod.ObjectMeta.Name = cluster.Name + "-" + pod.ObjectMeta.Name
-		pod.ObjectMeta.Labels["component"] = cluster.Name + "-" + pod.ObjectMeta.Labels["component"]
-		// Use secret instead of hostPath
-		for i, volume := range pod.Spec.Volumes {
-			if volume.Name == kubeadmconstants.KubeCertificatesVolumeName {
-				pod.Spec.Volumes[i].VolumeSource = apiv1.VolumeSource{
-					Secret: &apiv1.SecretVolumeSource{
-						SecretName: kubeadmconstants.KubeCertificatesVolumeName,
-					},
-				}
-			}
-			if volume.Name == kubeadmconstants.KubeConfigVolumeName {
-				pod.Spec.Volumes[i].VolumeSource = apiv1.VolumeSource{
-					Secret: &apiv1.SecretVolumeSource{
-						SecretName: kubeconfigSecret,
-					},
-				}
-				for iC, container := range pod.Spec.Containers {
-					for iVM, volumeMount := range container.VolumeMounts {
-						if volumeMount.Name == kubeadmconstants.KubeConfigVolumeName {
-							pod.Spec.Containers[iC].VolumeMounts[iVM].MountPath = kubeadmconstants.KubernetesDir
-							pod.Spec.Containers[iC].VolumeMounts[iVM].ReadOnly = false
-						}
-					}
-				}
-			}
-		}
-		deploy := &extv1beta1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pod.Name,
-				Namespace: cluster.Namespace,
-			},
-			Spec: extv1beta1.DeploymentSpec{
-				Replicas: int32Ptr(1),
-				Template: apiv1.PodTemplateSpec{
-					ObjectMeta: pod.ObjectMeta,
-					Spec:       pod.Spec,
-				},
-			},
-		}
-		if err := apiclient.CreateOrUpdateDeployment(k8sClient, deploy); err != nil {
+
+	deployments := GetControleplaneDeployments(cluster, externalKubeadmCfg, semK8sVersion)
+	for _, deployment := range deployments {
+		if err := apiclient.CreateOrUpdateDeployment(k8sClient, deployment); err != nil {
 			glog.Errorf("Pod deployment fail: %v", err)
+			return err
 		}
 	}
 
