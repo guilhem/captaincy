@@ -39,9 +39,9 @@ type certsWallet struct {
 	FrontProxyClientKey      *rsa.PrivateKey
 }
 
-func certsPhase(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, ns string, ips []net.IP) error {
+func certsPhase(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfiguration, ns string, ips []net.IP, hostname string) error {
 	if !certificatesSecretExists(k8sClient, ns) {
-		wallet, err := createCerts(ips)
+		wallet, err := createCerts(ips, hostname)
 		if err != nil {
 			return err
 		}
@@ -55,7 +55,7 @@ func certsPhase(k8sClient *kubernetes.Clientset, cfg *kubeadmapi.MasterConfigura
 	return nil
 }
 
-func createCerts(ips []net.IP) (*certsWallet, error) {
+func createCerts(ips []net.IP, hostname string) (*certsWallet, error) {
 	wallet := certsWallet{}
 
 	var err error
@@ -72,6 +72,7 @@ func createCerts(ips []net.IP) (*certsWallet, error) {
 			"kubernetes.default",
 			"kubernetes.default.svc",
 			fmt.Sprintf("kubernetes.default.svc.%s", "apiserver"),
+			hostname,
 		},
 		IPs: ips,
 	}
