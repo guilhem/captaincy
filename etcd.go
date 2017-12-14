@@ -69,7 +69,6 @@ func createEtcdOperator(client *kubernetes.Clientset, ns string) error {
 }
 
 func createEtcdCluster(client *etcdclientset.Clientset, apiExtClient *apiextensionsclientset.Clientset, name string, ns string) (*etcdv1beta2.EtcdCluster, error) {
-
 	if err := waitForETCDCRD(apiExtClient); err != nil {
 		return nil, err
 	}
