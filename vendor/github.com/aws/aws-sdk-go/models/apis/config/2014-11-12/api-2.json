@@ -84,8 +84,7 @@
       "output":{"shape":"DescribeComplianceByConfigRuleResponse"},
       "errors":[
         {"shape":"InvalidParameterValueException"},
-        {"shape":"NoSuchConfigRuleException"},
-        {"shape":"InvalidNextTokenException"}
+        {"shape":"NoSuchConfigRuleException"}
       ]
     },
     "DescribeComplianceByResource":{
@@ -111,8 +110,7 @@
       "output":{"shape":"DescribeConfigRuleEvaluationStatusResponse"},
       "errors":[
         {"shape":"NoSuchConfigRuleException"},
-        {"shape":"InvalidParameterValueException"},
-        {"shape":"InvalidNextTokenException"}
+        {"shape":"InvalidParameterValueException"}
       ]
     },
     "DescribeConfigRules":{
@@ -124,8 +122,7 @@
       "input":{"shape":"DescribeConfigRulesRequest"},
       "output":{"shape":"DescribeConfigRulesResponse"},
       "errors":[
-        {"shape":"NoSuchConfigRuleException"},
-        {"shape":"InvalidNextTokenException"}
+        {"shape":"NoSuchConfigRuleException"}
       ]
     },
     "DescribeConfigurationRecorderStatus":{
@@ -1169,8 +1166,7 @@
       "required":["ResultToken"],
       "members":{
         "Evaluations":{"shape":"Evaluations"},
-        "ResultToken":{"shape":"String"},
-        "TestMode":{"shape":"Boolean"}
+        "ResultToken":{"shape":"String"}
       }
     },
     "PutEvaluationsResponse":{
@@ -1294,8 +1290,7 @@
         "AWS::Redshift::ClusterParameterGroup",
         "AWS::Redshift::ClusterSecurityGroup",
         "AWS::Redshift::ClusterSubnetGroup",
-        "AWS::Redshift::EventSubscription",
-        "AWS::CloudWatch::Alarm"
+        "AWS::Redshift::EventSubscription"
       ]
     },
     "ResourceTypeList":{

@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package testutils contains some test utilities for the Azure SDK
 package testutils
 

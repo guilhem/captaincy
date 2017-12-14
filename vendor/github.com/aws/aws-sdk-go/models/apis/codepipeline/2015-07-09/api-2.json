@@ -202,20 +202,6 @@
         {"shape":"InvalidNextTokenException"}
       ]
     },
-    "ListPipelineExecutions":{
-      "name":"ListPipelineExecutions",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListPipelineExecutionsInput"},
-      "output":{"shape":"ListPipelineExecutionsOutput"},
-      "errors":[
-        {"shape":"ValidationException"},
-        {"shape":"PipelineNotFoundException"},
-        {"shape":"InvalidNextTokenException"}
-      ]
-    },
     "ListPipelines":{
       "name":"ListPipelines",
       "http":{
@@ -502,7 +488,7 @@
     },
     "ActionConfigurationQueryableValue":{
       "type":"string",
-      "max":50,
+      "max":20,
       "min":1,
       "pattern":"[a-zA-Z0-9_-]+"
     },
@@ -1206,22 +1192,6 @@
         "nextToken":{"shape":"NextToken"}
       }
     },
-    "ListPipelineExecutionsInput":{
-      "type":"structure",
-      "required":["pipelineName"],
-      "members":{
-        "pipelineName":{"shape":"PipelineName"},
-        "maxResults":{"shape":"MaxResults"},
-        "nextToken":{"shape":"NextToken"}
-      }
-    },
-    "ListPipelineExecutionsOutput":{
-      "type":"structure",
-      "members":{
-        "pipelineExecutionSummaries":{"shape":"PipelineExecutionSummaryList"},
-        "nextToken":{"shape":"NextToken"}
-      }
-    },
     "ListPipelinesInput":{
       "type":"structure",
       "members":{
@@ -1237,11 +1207,6 @@
     },
     "MaxBatchSize":{
       "type":"integer",
-      "min":1
-    },
-    "MaxResults":{
-      "type":"integer",
-      "max":100,
       "min":1
     },
     "MaximumArtifactCount":{
@@ -1331,19 +1296,6 @@
         "Superseded",
         "Failed"
       ]
-    },
-    "PipelineExecutionSummary":{
-      "type":"structure",
-      "members":{
-        "pipelineExecutionId":{"shape":"PipelineExecutionId"},
-        "status":{"shape":"PipelineExecutionStatus"},
-        "startTime":{"shape":"Timestamp"},
-        "lastUpdateTime":{"shape":"Timestamp"}
-      }
-    },
-    "PipelineExecutionSummaryList":{
-      "type":"list",
-      "member":{"shape":"PipelineExecutionSummary"}
     },
     "PipelineList":{
       "type":"list",

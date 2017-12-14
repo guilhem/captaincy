@@ -16,6 +16,7 @@ package e2e
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"testing"
@@ -31,6 +32,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func init() {
+	rand.Seed(time.Now().UTC().UnixNano())
+}
 
 // TestBackupAndRestore runs the backup test first, and only runs the restore test after if the backup test succeeds and sets the S3 path
 func TestBackupAndRestore(t *testing.T) {
@@ -61,10 +66,28 @@ func verifyAWSEnvVars() error {
 // It returns the full S3 path where the backup is saved.
 func testEtcdBackupOperatorForS3Backup(t *testing.T) string {
 	f := framework.Global
-	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, e2eutil.NewCluster("test-etcd-", 3))
+	suffix := fmt.Sprintf("-%d", rand.Uint64())
+	clusterName := "test-etcd-backup-" + suffix
+	memberPeerTLSSecret := "etcd-peer-tls" + suffix
+	memberClientTLSSecret := "etcd-server-tls" + suffix
+	operatorClientTLSSecret := "etcd-client-tls" + suffix
+
+	err := e2eutil.PrepareTLS(clusterName, f.Namespace, memberPeerTLSSecret, memberClientTLSSecret, operatorClientTLSSecret)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		err := e2eutil.DeleteSecrets(f.KubeClient, f.Namespace, memberPeerTLSSecret, memberClientTLSSecret, operatorClientTLSSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	c := e2eutil.NewCluster("", 3)
+	c.Name = clusterName
+	e2eutil.ClusterCRWithTLS(c, memberPeerTLSSecret, memberClientTLSSecret, operatorClientTLSSecret)
+	testEtcd, err := e2eutil.CreateCluster(t, f.CRClient, f.Namespace, c)
+
 	defer func() {
 		if err := e2eutil.DeleteCluster(t, f.CRClient, f.KubeClient, testEtcd); err != nil {
 			t.Fatal(err)
@@ -73,7 +96,8 @@ func testEtcdBackupOperatorForS3Backup(t *testing.T) string {
 	if _, err := e2eutil.WaitUntilSizeReached(t, f.CRClient, 3, 6, testEtcd); err != nil {
 		t.Fatalf("failed to create 3 members etcd cluster: %v", err)
 	}
-	eb, err := f.CRClient.EtcdV1beta2().EtcdBackups(f.Namespace).Create(e2eutil.NewS3Backup(testEtcd.Name, os.Getenv("TEST_S3_BUCKET"), os.Getenv("TEST_AWS_SECRET")))
+	backCR := e2eutil.NewS3Backup(testEtcd.Name, os.Getenv("TEST_S3_BUCKET"), os.Getenv("TEST_AWS_SECRET"), operatorClientTLSSecret)
+	eb, err := f.CRClient.EtcdV1beta2().EtcdBackups(f.Namespace).Create(backCR)
 	if err != nil {
 		t.Fatalf("failed to create etcd backup cr: %v", err)
 	}
@@ -126,7 +150,7 @@ func testEtcdRestoreOperatorForS3Source(t *testing.T, s3Path string) {
 	f := framework.Global
 
 	restoreSource := api.RestoreSource{S3: e2eutil.NewS3RestoreSource(s3Path, os.Getenv("TEST_AWS_SECRET"))}
-	er := e2eutil.NewEtcdRestore("test-etcd-restore-", "3.1.8", 3, restoreSource)
+	er := e2eutil.NewEtcdRestore("test-etcd-restore-", "3.2.11", 3, restoreSource)
 	er, err := f.CRClient.EtcdV1beta2().EtcdRestores(f.Namespace).Create(er)
 	if err != nil {
 		t.Fatalf("failed to create etcd restore cr: %v", err)

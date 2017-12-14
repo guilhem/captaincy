@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package virtualmachine provides a client for Virtual Machines.
 package virtualmachine
 

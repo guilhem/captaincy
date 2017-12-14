@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package management provides the main API client to construct other clients
 // and make requests to the Microsoft Azure Service Management REST API.
 package management

@@ -1,12 +1,14 @@
-# Operation Guide
+# Installation guide
 
-## Install etcd operator
+## Set up RBAC
 
-Set up basic [RBAC rules](./rbac.md) for etcd operator:
+Set up basic [RBAC rules][rbac-rules] for etcd operator:
 
 ```bash
 $ example/rbac/create_role.sh
 ```
+
+## Install etcd operator
 
 Create a deployment for etcd operator:
 
@@ -25,10 +27,12 @@ etcdclusters.etcd.database.coreos.com   CustomResourceDefinition.v1beta1.apiexte
 ## Uninstall etcd operator
 
 Note that the etcd clusters managed by etcd operator will **NOT** be deleted even if the operator is uninstalled.
-This is an intentional design to prevent accidental operator failure from killing all the etcd clusters.
-In order to delete all clusters, delete all cluster CR objects before uninstall the operator.
 
-Cleanup etcd operator:
+This is an intentional design to prevent accidental operator failure from killing all the etcd clusters.
+
+To delete all clusters, delete all cluster CR objects before uninstalling the operator.
+
+Clean up etcd operator:
 
 ```bash
 kubectl delete -f example/deployment.yaml
@@ -37,10 +41,12 @@ kubectl delete clusterrole etcd-operator
 kubectl delete clusterrolebinding etcd-operator
 ```
 
-## Installation via Helm
-**Disclaimer:** The following Helm chart is an external project not maintained by the etcd-operator maintainers; so it may not be up to date.
+## Installation using Helm
 
-etcd-operator is available as a [Helm
-chart](https://github.com/kubernetes/charts/tree/master/stable/etcd-operator).
-Follow the instructions on the chart to install etcd-operator on your cluster.
- 
+**Disclaimer:** The following Helm chart is an external project not maintained by the etcd operator maintainers; so it may not be up to date.
+
+etcd operator is available as a [Helm chart][etcd-helm]. Follow the instructions on the chart to install etcd operator on clusters.
+
+
+[rbac-rules]: rbac.md
+[etcd-helm]: https://github.com/kubernetes/charts/tree/master/stable/etcd-operator/

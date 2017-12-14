@@ -23,6 +23,7 @@ import (
 	"k8s.io/kubernetes/cmd/kubeadm/app/apis/kubeadm"
 	"k8s.io/kubernetes/cmd/kubeadm/app/phases/controlplane"
 	"k8s.io/kubernetes/cmd/kubeadm/app/util/apiclient"
+	masterconfig "k8s.io/kubernetes/cmd/kubeadm/app/util/config"
 	"k8s.io/kubernetes/pkg/util/version"
 )
 
@@ -108,6 +109,9 @@ func createCluster(k8sClient *kubernetes.Clientset, etcdClient *etcdclientset.Cl
 	}
 
 	SetDefaults_MasterConfiguration(kubeadmCfg)
+	if err := masterconfig.SetInitDynamicDefaults(kubeadmCfg); err != nil {
+		glog.Errorf("Set Init Dynamic defaults configs fail: %v", err)
+	}
 
 	internalKubeadmCfg := kubeadmCfg.DeepCopy()
 	internalKubeadmCfg.API.AdvertiseAddress = internalAPIIP

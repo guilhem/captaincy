@@ -1,5 +1,3 @@
-// +build go1.7
-
 // Package virtualmachineimage provides a client for Virtual Machine Images.
 package virtualmachineimage
 

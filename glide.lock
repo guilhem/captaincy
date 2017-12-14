@@ -1,5 +1,5 @@
-hash: 98b9b64d17ccee1ae5016d8147a402870bd22bdac14dff2db85132b8a1d05108
-updated: 2017-12-07T00:25:38.274319327+01:00
+hash: 227b1da0f7fc87b0830905ccf8ff125ef79b71cfc2c51bd2339bebf154a03e5f
+updated: 2017-12-14T13:57:07.479546682+01:00
 imports:
 - name: bitbucket.org/ww/goautoneg
   version: '***'
@@ -9,7 +9,7 @@ imports:
   - compute/metadata
   - internal
 - name: github.com/aws/aws-sdk-go
-  version: b709581f82a77c0ff00790d1446c05719fed714d
+  version: 63ce630574a5ec05ecd8e8de5cea16332a5a684d
   subpackages:
   - aws
   - aws/awserr
@@ -27,7 +27,6 @@ imports:
   - aws/request
   - aws/session
   - aws/signer/v4
-  - internal/shareddefaults
   - private/protocol
   - private/protocol/ec2query
   - private/protocol/json/jsonutil
@@ -35,23 +34,27 @@ imports:
   - private/protocol/query
   - private/protocol/query/queryutil
   - private/protocol/rest
+  - private/protocol/restxml
   - private/protocol/xml/xmlutil
+  - private/waiter
   - service/autoscaling
   - service/ec2
   - service/ecr
   - service/elb
   - service/kms
+  - service/route53
   - service/sts
 - name: github.com/Azure/azure-sdk-for-go
-  version: 57db66900881e9fd21fd041a9d013514700ecab3
+  version: 786cc84138518bf7fd6d60e92fad1ac9d1a117ad
   subpackages:
   - arm/compute
+  - arm/containerregistry
   - arm/disk
   - arm/network
   - arm/storage
   - storage
 - name: github.com/Azure/go-autorest
-  version: 5432abe734f8d95c78340cd56712f912906e6514
+  version: 58f6f26e200fa5dfb40c9cd1c83f3e2c860d779d
   subpackages:
   - autorest
   - autorest/adal
@@ -82,7 +85,7 @@ imports:
   - signer
   - signer/local
 - name: github.com/coreos/etcd
-  version: 0f4a535c2fb7a2920e13e2e19b9eaf6b2e9285e5
+  version: 0520cb9304cb2385f7e72b8bc02d6e4d3257158a
   subpackages:
   - auth/authpb
   - client
@@ -96,7 +99,7 @@ imports:
   - pkg/transport
   - pkg/types
 - name: github.com/coreos/etcd-operator
-  version: 3bcbdb19d9a82a48d49f280ba7facb87060d8303
+  version: ba1ce6e37ec7795c56f2047f3d26597665a05c10
   subpackages:
   - pkg/apis/etcd/v1beta2
   - pkg/generated/clientset/versioned
@@ -332,13 +335,13 @@ imports:
   - specs-go
   - specs-go/v1
 - name: github.com/pborman/uuid
-  version: a97ce2ca70fa5a848076093f05e639a89ca34d06
+  version: ca53cad383cad2479bbba7f7a1a05797ec1386e4
 - name: github.com/peterbourgon/diskv
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
-  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+  version: a22138067af1c4942683050411a841ade67fe1eb
 - name: github.com/prometheus/client_golang
-  version: c5b7fccd204277076155f10851dad72b76a49317
+  version: e7e903064f5e9eb5da98208bae10b475d4db0f8c
   subpackages:
   - prometheus
 - name: github.com/prometheus/client_model
@@ -389,7 +392,7 @@ imports:
 - name: github.com/satori/uuid
   version: 5bf94b69c6b68ee1b541973bb8e1144db23a194b
 - name: github.com/sirupsen/logrus
-  version: 202f25545ea4cf9b191ff7f846df5d87c9382c2b
+  version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/pflag
   version: 9ff6c6923cfffbcd502984b8e0c80539a94968b7
 - name: github.com/ugorji/go
@@ -543,7 +546,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: 53feefa2559fb8dfa8d81baad31be332c97d6c77
 - name: k8s.io/api
-  version: 4df58c811fe2e65feb879227b2b245e4dc26e7ad
+  version: 9b9dca205a15b6ce9ef10091f05d60a13fdcf418
   subpackages:
   - admission/v1alpha1
   - admissionregistration/v1alpha1
@@ -572,7 +575,7 @@ imports:
   - storage/v1
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
-  version: 5bc0d8f05a92b3a09bcf1a9db442a29c0b7a514d
+  version: 996a70a27a0dcf53642ca52601b9107cb2ad810a
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
@@ -581,7 +584,7 @@ imports:
   - pkg/client/clientset/clientset/typed/apiextensions/v1beta1
   - pkg/features
 - name: k8s.io/apimachinery
-  version: 019ae5ada31de202164b118aee88ee2d14075c31
+  version: 5134afd2c0c91158afac0d8a28bd2177185a3bcc
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -639,7 +642,7 @@ imports:
   - third_party/forked/golang/netutil
   - third_party/forked/golang/reflect
 - name: k8s.io/apiserver
-  version: 9707c008294d447053c0e2737c256ee23f99e5b4
+  version: 2279c12eff8d4d1dc65a104dac36483c1b59ff54
   subpackages:
   - pkg/admission
   - pkg/admission/initializer
@@ -870,22 +873,27 @@ imports:
   - pkg/handler
   - pkg/util
 - name: k8s.io/kubernetes
-  version: f0efb3cb883751c5ffdbe6d515f3cb4fbe7b7acd
+  version: dce4b4c82a887c0e7bdd83c5d9dd13e2d4514f78
   subpackages:
   - cmd/kube-apiserver/app/options
   - cmd/kube-controller-manager/app/options
   - cmd/kubeadm/app/apis/kubeadm
   - cmd/kubeadm/app/apis/kubeadm/v1alpha1
+  - cmd/kubeadm/app/apis/kubeadm/validation
   - cmd/kubeadm/app/constants
+  - cmd/kubeadm/app/features
   - cmd/kubeadm/app/images
+  - cmd/kubeadm/app/phases/bootstraptoken/node
   - cmd/kubeadm/app/phases/certs
   - cmd/kubeadm/app/phases/certs/pkiutil
   - cmd/kubeadm/app/phases/controlplane
   - cmd/kubeadm/app/preflight
   - cmd/kubeadm/app/util
   - cmd/kubeadm/app/util/apiclient
+  - cmd/kubeadm/app/util/config
   - cmd/kubeadm/app/util/kubeconfig
   - cmd/kubeadm/app/util/staticpod
+  - cmd/kubeadm/app/util/token
   - pkg/api
   - pkg/api/helper
   - pkg/api/helper/qos
@@ -968,6 +976,7 @@ imports:
   - pkg/apis/storage/v1beta1
   - pkg/auth/authorizer/abac
   - pkg/auth/nodeidentifier
+  - pkg/bootstrap/api
   - pkg/capabilities
   - pkg/client/clientset_generated/internalclientset
   - pkg/client/clientset_generated/internalclientset/scheme
@@ -1157,7 +1166,7 @@ imports:
   - third_party/forked/gonum/graph/simple
   - third_party/forked/gonum/graph/traverse
 - name: k8s.io/metrics
-  version: 51ef1f2130dc881bd0b1482c94c1fec441621b8a
+  version: 79239b4dbcda894c89aadd3cffa4cc70a81175cb
   subpackages:
   - pkg/apis/metrics
   - pkg/apis/metrics/v1alpha1

@@ -25,8 +25,8 @@ import (
 
 	api "github.com/coreos/etcd-operator/pkg/apis/etcd/v1beta2"
 	"github.com/coreos/etcd-operator/pkg/debug"
-	"github.com/coreos/etcd-operator/pkg/garbagecollection"
 	"github.com/coreos/etcd-operator/pkg/generated/clientset/versioned"
+	"github.com/coreos/etcd-operator/pkg/util"
 	"github.com/coreos/etcd-operator/pkg/util/etcdutil"
 	"github.com/coreos/etcd-operator/pkg/util/k8sutil"
 	"github.com/coreos/etcd-operator/pkg/util/retryutil"
@@ -48,7 +48,6 @@ var (
 type clusterEventType string
 
 const (
-	eventDeleteCluster clusterEventType = "Delete"
 	eventModifyCluster clusterEventType = "Modify"
 )
 
@@ -88,8 +87,6 @@ type Cluster struct {
 
 	tlsConfig *tls.Config
 
-	gc *garbagecollection.GC
-
 	eventsCli corev1.EventInterface
 }
 
@@ -108,7 +105,6 @@ func New(config Config, cl *api.EtcdCluster) *Cluster {
 		eventCh:     make(chan *clusterEvent, 100),
 		stopCh:      make(chan struct{}),
 		status:      *(cl.Status.DeepCopy()),
-		gc:          garbagecollection.New(config.KubeCli, cl.Namespace),
 		eventsCli:   config.KubeCli.Core().Events(cl.Namespace),
 	}
 
@@ -169,8 +165,6 @@ func (c *Cluster) create() error {
 	}
 	c.logClusterCreation()
 
-	c.gc.CollectCluster(c.cluster.Name, c.cluster.UID)
-
 	return c.prepareSeedMember()
 }
 
@@ -196,7 +190,8 @@ func (c *Cluster) prepareSeedMember() error {
 }
 
 func (c *Cluster) Delete() {
-	c.send(&clusterEvent{typ: eventDeleteCluster})
+	c.logger.Info("cluster is deleted by user")
+	close(c.stopCh)
 }
 
 func (c *Cluster) send(ev *clusterEvent) {
@@ -217,12 +212,6 @@ func (c *Cluster) run() {
 	c.status.ServiceName = k8sutil.ClientServiceName(c.cluster.Name)
 	c.status.ClientPort = k8sutil.EtcdClientPort
 
-	defer func() {
-		c.logger.Infof("deleting the failed cluster")
-		c.reportFailedStatus()
-		c.delete()
-	}()
-
 	c.status.SetPhase(api.ClusterPhaseRunning)
 	if err := c.updateCRStatus(); err != nil {
 		c.logger.Warningf("update initial CR status failed: %v", err)
@@ -232,6 +221,8 @@ func (c *Cluster) run() {
 	var rerr error
 	for {
 		select {
+		case <-c.stopCh:
+			return
 		case event := <-c.eventCh:
 			switch event.typ {
 			case eventModifyCluster:
@@ -239,12 +230,9 @@ func (c *Cluster) run() {
 				if err != nil {
 					c.logger.Errorf("handle update event failed: %v", err)
 					c.status.SetReason(err.Error())
+					c.reportFailedStatus()
 					return
 				}
-
-			case eventDeleteCluster:
-				c.logger.Infof("cluster is deleted by the user")
-				return
 			default:
 				panic("unknown event type" + event.typ)
 			}
@@ -292,7 +280,7 @@ func (c *Cluster) run() {
 				c.logger.Errorf("failed to reconcile: %v", rerr)
 				break
 			}
-			c.updateMemberStatus(c.members)
+			c.updateMemberStatus(c.members, k8sutil.GetPodNames(running))
 			if err := c.updateCRStatus(); err != nil {
 				c.logger.Warningf("periodic update CR status failed: %v", err)
 			}
@@ -307,6 +295,7 @@ func (c *Cluster) run() {
 		if isFatalError(rerr) {
 			c.status.SetReason(rerr.Error())
 			c.logger.Errorf("cluster failed: %v", rerr)
+			c.reportFailedStatus()
 			return
 		}
 	}
@@ -378,10 +367,6 @@ func (c *Cluster) Update(cl *api.EtcdCluster) {
 	})
 }
 
-func (c *Cluster) delete() {
-	c.gc.CollectCluster(c.cluster.Name, garbagecollection.NullUID)
-}
-
 func (c *Cluster) setupServices() error {
 	err := k8sutil.CreateClientService(c.config.KubeCli, c.cluster.Name, c.cluster.Namespace, c.cluster.AsOwner())
 	if err != nil {
@@ -423,6 +408,11 @@ func (c *Cluster) pollPods() (running, pending []*v1.Pod, err error) {
 
 	for i := range podList.Items {
 		pod := &podList.Items[i]
+		// Avoid polling deleted pods. k8s issue where deleted pods would sometimes show the status Pending
+		// See https://github.com/coreos/etcd-operator/issues/1693
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
 		if len(pod.OwnerReferences) < 1 {
 			c.logger.Warningf("pollPods: ignore pod %v: no owner", pod.Name)
 			continue
@@ -443,21 +433,14 @@ func (c *Cluster) pollPods() (running, pending []*v1.Pod, err error) {
 	return running, pending, nil
 }
 
-func (c *Cluster) updateMemberStatus(members etcdutil.MemberSet) {
-	var ready, unready []string
+func (c *Cluster) updateMemberStatus(members etcdutil.MemberSet, running []string) {
+	var unready []string
 	for _, m := range members {
-		url := m.ClientURL()
-		healthy, err := etcdutil.CheckHealth(url, c.tlsConfig)
-		if err != nil {
-			c.logger.Warningf("health check of etcd member (%s) failed: %v", url, err)
-		}
-		if healthy {
-			ready = append(ready, m.Name)
-		} else {
+		if !util.PresentIn(m.Name, running) {
 			unready = append(unready, m.Name)
 		}
 	}
-	c.status.Members.Ready = ready
+	c.status.Members.Ready = running
 	c.status.Members.Unready = unready
 }
 
@@ -479,8 +462,9 @@ func (c *Cluster) updateCRStatus() error {
 }
 
 func (c *Cluster) reportFailedStatus() {
-	retryInterval := 5 * time.Second
+	c.logger.Info("cluster failed. Reporting failed reason...")
 
+	retryInterval := 5 * time.Second
 	f := func() (bool, error) {
 		c.status.SetPhase(api.ClusterPhaseFailed)
 		err := c.updateCRStatus()
@@ -507,7 +491,6 @@ func (c *Cluster) reportFailedStatus() {
 		}
 		c.cluster = cl
 		return false, nil
-
 	}
 
 	retryutil.Retry(retryInterval, math.MaxInt64, f)

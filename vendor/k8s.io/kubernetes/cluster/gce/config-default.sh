@@ -240,10 +240,14 @@ if [ ${ENABLE_IP_ALIASES} = true ]; then
   PROVIDER_VARS="${PROVIDER_VARS:-} ENABLE_IP_ALIASES"
 fi
 
-
 # Enable GCE Alpha features.
 if [[ -n "${GCE_ALPHA_FEATURES:-}" ]]; then
   PROVIDER_VARS="${PROVIDER_VARS:-} GCE_ALPHA_FEATURES"
+fi
+
+# Disable Docker live-restore.
+if [[ -n "${DISABLE_DOCKER_LIVE_RESTORE:-}" ]]; then
+  PROVIDER_VARS="${PROVIDER_VARS:-} DISABLE_DOCKER_LIVE_RESTORE"
 fi
 
 # Admission Controllers to invoke prior to persisting objects in cluster
@@ -270,6 +274,8 @@ OPENCONTRAIL_PUBLIC_SUBNET="${OPENCONTRAIL_PUBLIC_SUBNET:-10.1.0.0/16}"
 
 # Network Policy plugin specific settings.
 NETWORK_POLICY_PROVIDER="${NETWORK_POLICY_PROVIDER:-none}" # calico
+
+NON_MASQUERADE_CIDR="0.0.0.0/0"
 
 # How should the kubelet configure hairpin mode?
 HAIRPIN_MODE="${HAIRPIN_MODE:-promiscuous-bridge}" # promiscuous-bridge, hairpin-veth, none

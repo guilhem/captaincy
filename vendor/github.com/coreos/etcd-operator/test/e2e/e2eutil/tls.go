@@ -23,7 +23,27 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
+
+// PrepareTLS creates all the required tls certs for a given clusterName.
+func PrepareTLS(clusterName, namespace, memberPeerTLSSecret, memberClientTLSSecret, operatorClientTLSSecret string) error {
+	err := PreparePeerTLSSecret(clusterName, namespace, memberPeerTLSSecret)
+	if err != nil {
+		return fmt.Errorf("failed to prepare peer TLS secret: %v", err)
+	}
+	certsDir, err := ioutil.TempDir("", "etcd-operator-tls-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(certsDir)
+	err = PrepareClientTLSSecret(certsDir, clusterName, namespace, memberClientTLSSecret, operatorClientTLSSecret)
+	if err != nil {
+		return fmt.Errorf("failed to prepare client TLS secret: %v", err)
+	}
+	return nil
+}
 
 func PreparePeerTLSSecret(clusterName, ns, secretName string) error {
 	dir, err := ioutil.TempDir("", "etcd-operator-tls-")
@@ -35,7 +55,12 @@ func PreparePeerTLSSecret(clusterName, ns, secretName string) error {
 	certPath := filepath.Join(dir, "peer.crt")
 	keyPath := filepath.Join(dir, "peer.key")
 	caPath := filepath.Join(dir, "peer-ca.crt")
-	hosts := []string{fmt.Sprintf("*.%s.%s.svc", clusterName, ns)}
+	hosts := []string{
+		fmt.Sprintf("*.%s.%s.svc", clusterName, ns),
+		// Due to issue https://github.com/coreos/etcd/issues/8797,
+		// we need to provide FQDN in certs at the moment.
+		fmt.Sprintf("*.%s.%s.svc.cluster.local", clusterName, ns),
+	}
 
 	err = prepareTLSCerts(certPath, keyPath, caPath, hosts)
 	if err != nil {
@@ -46,7 +71,12 @@ func PreparePeerTLSSecret(clusterName, ns, secretName string) error {
 		fmt.Sprintf("--from-file=%s", certPath),
 		fmt.Sprintf("--from-file=%s", keyPath),
 	)
-	return cmd.Run()
+	stdoutStderr, err := cmd.CombinedOutput()
+	if err != nil {
+		logrus.Errorf("failed to create tls secret. stdout/stderr: %s", stdoutStderr)
+		return fmt.Errorf("failed to create tls secret: %v", err)
+	}
+	return nil
 }
 
 func PrepareClientTLSSecret(dir, clusterName, ns, mSecret, oSecret string) error {
@@ -79,9 +109,10 @@ func PrepareClientTLSSecret(dir, clusterName, ns, mSecret, oSecret string) error
 		fmt.Sprintf("--from-file=%s", mCertPath),
 		fmt.Sprintf("--from-file=%s", mKeyPath),
 	)
-	err = cmd.Run()
+	stdoutStderr, err := cmd.CombinedOutput()
 	if err != nil {
-		return err
+		logrus.Errorf("failed to create tls secret. stdout/stderr: %s", stdoutStderr)
+		return fmt.Errorf("failed to create tls secret: %v", err)
 	}
 
 	cmd = exec.Command("kubectl", "-n", ns, "create", "secret", "generic", oSecret,
@@ -89,7 +120,12 @@ func PrepareClientTLSSecret(dir, clusterName, ns, mSecret, oSecret string) error
 		fmt.Sprintf("--from-file=%s", oCertPath),
 		fmt.Sprintf("--from-file=%s", oKeyPath),
 	)
-	return cmd.Run()
+	stdoutStderr, err = cmd.CombinedOutput()
+	if err != nil {
+		logrus.Errorf("failed to create tls secret. stdout/stderr: %s", stdoutStderr)
+		return fmt.Errorf("failed to create tls secret: %v", err)
+	}
+	return nil
 }
 
 func prepareTLSCerts(certPath, keyPath, caPath string, hosts []string) error {
